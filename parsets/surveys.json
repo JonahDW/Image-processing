@@ -1,0 +1,25 @@
+{
+    "FIRST" : {
+    "name" : "FIRST",
+    "Maj" : 6.4,
+    "Maj2" : 5.4,
+    "Maj3" : 6.8,
+    "Min" : 5.4,
+    "PA" : 0.0,
+    "Freq" : 1400.0
+    },
+    "NVSS" : {
+    "name" : "NVSS",
+    "Maj" : 45.0,
+    "Min" : 45.0,
+    "PA" : 0.0,
+    "Freq" : 1400.0
+    },
+    "SUMSS" : {
+    "name" : "SUMSS",
+    "Maj" : 45.0,
+    "Min" : 45.0,
+    "PA" : 0.0,
+    "Freq" : 843.0
+    }
+}

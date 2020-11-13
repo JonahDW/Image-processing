@@ -1,0 +1,27 @@
+{
+    "process_image" : {
+        "thresh_pix" : 10.0,
+        "thresh_isl" : 5.0,
+        "adaptive_rms_box" : true,
+        "adaptive_thresh" : 100.0
+    },
+    "export_image" : {
+        "ch0" : true,
+        "rms" : false,
+        "mean" : false,
+        "pi" : false,
+        "gaus_resid" : false,
+        "shap_resid" : false,
+        "psf_major" : false,
+        "psf_minor" : false,
+        "psf_pa" : false,
+        "psf_ratio" : false,
+        "psf_ratio_aper" : false,
+        "island_mask" : false
+    },
+    "write_catalog" : {
+        "format" : "fits",
+        "catalog_type" : "gaul",
+        "clobber" : true
+    }
+}
