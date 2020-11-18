@@ -248,8 +248,8 @@ def plot_astrometrics(pointing, ext, matches, datadir, astro, dpi):
 
     ax.axhline(0,-xmax_abs,xmax_abs, color='k', zorder=1)
     ax.axvline(0,-ymax_abs,ymax_abs, color='k', zorder=1)
-    ax.axhline(np.mean(dRA),-xmax_abs,xmax_abs, color='grey', linestyle='dashed', zorder=1)
-    ax.axvline(np.mean(dDEC),-ymax_abs,ymax_abs, color='grey', linestyle='dashed', zorder=1)
+    ax.axhline(np.median(dDEC),-xmax_abs,xmax_abs, color='grey', linestyle='dashed', zorder=1)
+    ax.axvline(np.median(dRA),-ymax_abs,ymax_abs, color='grey', linestyle='dashed', zorder=1)
 
     ax.set_title(f'Astrometric offset of {len(dRA)} sources')
     ax.set_xlabel('RA offset (arcsec)')

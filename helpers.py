@@ -18,7 +18,7 @@ def meerkat_lpb(a, b, freq, offset):
     return a_beam
 
 def get_beam(identity, ra_center, dec_center):
-    with open('surveys.json') as f:
+    with open('parsets/surveys.json') as f:
         beam_dict = json.load(f)
 
     BMaj = beam_dict[identity]['Maj']

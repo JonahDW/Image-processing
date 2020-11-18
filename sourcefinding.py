@@ -26,7 +26,7 @@ def run_bdsf(image, argfile):
     image -- Name of image
     catalog_type -- How sources are combined in catalog, i.e.
                     'gaul' for a list of Gaussians (for masking)
-                    'srl' for a list of sources (for cataloguing)
+                    'srl' for a list of sources (for cataloging)
     output_imgs -- Specify additional output images produced by
                    bdsf. Options are: 'gaus_resid',
                   'shap_resid', 'rms', 'mean', 'gaus_model',
@@ -106,17 +106,20 @@ def write_mask(outfile, regions, size=1.0):
     print(f'Wrote mask file {outfile}')
     write_crtf(regions, outfile)
 
-def plot_sf_results(image_file, regions, plot):
+def plot_sf_results(image_file, rms_image, regions, plot):
     '''
     Plot the results of the sourcefinding
     '''
     image = fits.open(image_file)
-    img = image[0].data
+    rms = fits.open(rms_image)
+
+    img = image[0].data[0,0,:,:]
+    rms_img = rms[0].data[0,0,:,:]
     wcs = WCS(image[0].header, naxis=2)
 
     fig = plt.figure(figsize=(20,20))
     ax = plt.subplot(projection=wcs)
-    ax.imshow(img[0,0,:,:], origin='lower', cmap='gist_gray', vmin=0, vmax=1e-3)
+    ax.imshow(img/rms_img, origin='lower', cmap='gist_gray', vmin=0, vmax=5)
     ax.set_xlabel('RA')
     ax.set_ylabel('DEC')
 
@@ -159,7 +162,8 @@ def main():
         print(f'Invalid mode {mode}, please choose between c(ataloging) or m(atching)')
 
     if plot:
-        plot_sf_results(f'{inpimage}_ch0.fits', bdsf_regions, plot)
+        inpimage = os.path.splitext(inpimage)[0]
+        plot_sf_results(f'{inpimage}_ch0.fits', f'{inpimage}_rms.fits', bdsf_regions, plot)
 
 def new_argument_parser():
 
