@@ -1,3 +1,4 @@
+from pathlib import Path
 import numpy as np
 import json
 
@@ -18,7 +19,17 @@ def meerkat_lpb(a, b, freq, offset):
     return a_beam
 
 def get_beam(identity, ra_center, dec_center):
-    with open('parsets/surveys.json') as f:
+    '''
+    Get the beam and frequency of a given survey. As for some surveys
+    the beam shape changes per position, the position needs to be given as well
+
+    Keyword arguments:
+    identity (string) -- The name of the survey (NVSS,SUMSS,FIRST)
+    ra_center (float) -- Right ascension to get the beam at
+    dec_center (float) -- Declination to get the beam at
+    '''
+    path = Path(__file__).parent / 'parsets/surveys.json'
+    with open(path) as f:
         beam_dict = json.load(f)
 
     BMaj = beam_dict[identity]['Maj']

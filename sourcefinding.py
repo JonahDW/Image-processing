@@ -7,6 +7,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from argparse import ArgumentParser
+from pathlib import Path
 
 from astropy.wcs import WCS
 from astropy.io import fits
@@ -37,7 +38,8 @@ def run_bdsf(image, argfile):
     inp_image = os.path.splitext(image)[0]
     outcatalog = inp_image+'_bdsfcat.fits'
 
-    with open(argfile) as f:
+    path = Path(__file__).parent / argfile
+    with open(path) as f:
         args_dict = json.load(f)
 
     img = bdsf.process_image(image, **args_dict['process_image'])

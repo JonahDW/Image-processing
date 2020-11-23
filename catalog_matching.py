@@ -3,6 +3,7 @@ import sys
 import numpy as np
 
 import json
+from pathlib import Path
 from argparse import ArgumentParser
 
 from astropy import units as u
@@ -17,14 +18,16 @@ import helpers
 
 class SourceEllipse:
 
-    def __init__(self, catalog_entry, ra='RA', dec='DEC', majax='Maj', minax='Min', pa='PA', peak_flux='Peak_flux', int_flux='Total_flux'):
+    def __init__(self, catalog_entry, ra='RA', dec='DEC', majax='Maj', minax='Min', pa='PA', peak_flux='Peak_flux', total_flux='Total_flux'):
         self.RA = catalog_entry[ra]
         self.DEC = catalog_entry[dec]
         self.Maj = catalog_entry[majax]
         self.Min = catalog_entry[minax]
         self.PA = catalog_entry[pa]
-        self.PeakFlux = catalog_entry[peak_flux]
-        self.IntFlux = catalog_entry[int_flux]
+        if peak_flux:
+            self.PeakFlux = catalog_entry[peak_flux]
+        if total_flux:
+            self.IntFlux = catalog_entry[total_flux]
 
     def match(self, ra_list, dec_list, separation = 0):
         '''
@@ -59,26 +62,37 @@ class ExternalCatalog():
     def __init__(self, name, catalog, center):
         self.name = name
         self.cat = catalog
-        self.sources = [SourceEllipse(source) for source in catalog]
 
         if name in ['NVSS','SUMSS','FIRST']:
+            self.sources = [SourceEllipse(source) for source in catalog]
             beam, freq = helpers.get_beam(name, center.ra.deg, center.dec.deg)
 
             self.BMaj = beam[0]
             self.BMin = beam[1]
             self.BPA = beam[2]
             self.freq = freq
+        else:
+            path = Path(__file__).parent / 'parsets/extcat.json'
+            with open(path) as f:
+                cat_info = json.load(f)
+
+            self.sources = [SourceEllipse(source, **cat_info['data_columns']) for source in catalog]
+            self.BMaj = cat_info['properties']['BMAJ']
+            self.BMin = cat_info['properties']['BMIN']
+            self.BPA = cat_info['properties']['BPA']
+            self.freq = cat_info['properties']['freq']
+
 
 class Pointing():
 
-    def __init__(self, catalog, ra='RA', dec='DEC'):
+    def __init__(self, catalog):
         self.cat = catalog
         self.sources = [SourceEllipse(source) for source in catalog]
 
-        self.RAmax = catalog[ra].max()
-        self.RAmin = catalog[ra].min()
-        self.DECmax = catalog[dec].max()
-        self.DECmin = catalog[dec].min()
+        self.RAmax = catalog['RA'].max()
+        self.RAmin = catalog['RA'].min()
+        self.DECmax = catalog['DEC'].max()
+        self.DECmin = catalog['DEC'].min()
 
         self.dDEC = (self.DECmax - self.DECmin)*u.degree
         self.dRA = (self.RAmax - self.RAmin)*u.degree
@@ -355,12 +369,19 @@ def main():
 
     if ext_cat == 'NVSS':
         ext_table = pointing.query_NVSS()
+        ext_catalog = ExternalCatalog(ext_cat, ext_table, pointing.center)
     elif ext_cat == 'SUMSS':
         ext_table = pointing.query_SUMSS()
+        ext_catalog = ExternalCatalog(ext_cat, ext_table, pointing.center)
     elif ext_cat == 'FIRST':
         ext_table = pointing.query_FIRST()
+        ext_catalog = ExternalCatalog(ext_cat, ext_table, pointing.center)
     elif os.path.exists(ext_cat):
         ext_table = Table.read(ext_cat)
+        if 'bdsfcat' in ext_cat:
+            ext_catalog = Pointing(ext_table)
+        else:
+            ext_catalog = ExternalCatalog(ext_cat, ext_table, pointing.center)
     else:
         print('Invalid input table!')
         exit()
@@ -368,8 +389,6 @@ def main():
     if len(ext_table) == 0:
         print('No sources were found to match, most likely the external catalog has no coverage here')
         exit()
-
-    ext_catalog = ExternalCatalog(ext_cat, ext_table, pointing.center)
 
     matches = match_catalogs(pointing, ext_catalog)
     plot_catalog_match(pointing, ext_catalog, matches, datadir, dpi)
@@ -389,7 +408,11 @@ def new_argument_parser():
                         help="""MeerKAT pointing catalog made by PyBDSF.""")
     parser.add_argument("ext_cat", default="NVSS",
                         help="""External catalog to match to, choice between
-                                NVSS, SUMMS, FIRST or a file (default NVSS).""")
+                                NVSS, SUMMS, FIRST or a file. If the external
+                                catalog is a PyBDSF catalog, make sure the filename
+                                has 'bdsfcat' in it. If a different catalog, the 
+                                parsets/extcat.json file must be used to specify its
+                                details (default NVSS).""")
     parser.add_argument('-d', '--dpi', default=300,
                         help="""DPI of the output images (default = 300).""")
     parser.add_argument("--astro", nargs="?", const=True,
@@ -403,6 +426,10 @@ def new_argument_parser():
     parser.add_argument("--fluxtype", default="Total",
                         help="""Whether to use Total or Peak flux for determining
                                 the flux ratio (default = Total).""")
+    parser.add_argument("--alpha", default=0.7,
+                        help="""The spectral slope to assume for calculating the
+                                flux ratio, where Flux_1 = Flux_2 * (freq_1/freq_2)^-alpha 
+                                (default = 0.7)""")
     parser.add_argument("--output", nargs="?", const=True,
                         help="""Output the result of the matching into a catalog,
                                 optionally provide an output filename

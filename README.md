@@ -42,13 +42,18 @@ Match a PyBDSF catalog to an external catalog. Choices are between NVSS, SUMSS a
 
 ```
 usage: catalog_matching.py [-h] [-d DPI] [--astro [ASTRO]] [--flux [FLUX]]
-                           [--fluxtype FLUXTYPE] [--output [OUTPUT]]
+                           [--fluxtype FLUXTYPE] [--alpha ALPHA]
+                           [--output [OUTPUT]]
                            pointing ext_cat
 
 positional arguments:
   pointing             MeerKAT pointing catalog made by PyBDSF.
   ext_cat              External catalog to match to, choice between NVSS,
-                       SUMMS, FIRST or a file (default NVSS).
+                       SUMMS, FIRST or a file. If the external catalog is a
+                       PyBDSF catalog, make sure the filename has 'bdsfcat' in
+                       it. If a different catalog, the parsets/extcat.json
+                       file must be used to specify its details (default
+                       NVSS).
 
 optional arguments:
   -h, --help           show this help message and exit
@@ -60,6 +65,9 @@ optional arguments:
                        an output filename (default = don't plot flux ratio).
   --fluxtype FLUXTYPE  Whether to use Total or Peak flux for determining the
                        flux ratio (default = Total).
+  --alpha ALPHA        The spectral slope to assume for calculating the flux
+                       ratio, where Flux_1 = Flux_2 * (freq_1/freq_2)^-alpha
+                       (default = 0.7)
   --output [OUTPUT]    Output the result of the matching into a catalog,
                        optionally provide an output filename (default = don't
                        output a catalog).

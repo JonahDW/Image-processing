@@ -3,11 +3,11 @@
         "thresh_pix" : 10.0,
         "thresh_isl" : 5.0,
         "adaptive_rms_box" : true,
-        "adaptive_thresh" : 100.0
+        "adaptive_thresh" : 20.0
     },
     "export_image" : {
         "ch0" : true,
-        "rms" : false,
+        "rms" : true,
         "mean" : false,
         "pi" : false,
         "gaus_resid" : false,

@@ -1,0 +1,17 @@
+{
+    "data_columns" : {
+        "ra" : "col1",
+        "dec" : "col2",
+        "majax" : "col3",
+        "minax" : "col4",
+        "pa" : "col5",
+        "peak_flux" : "col6",
+        "total_flux" : null
+    },
+    "properties" : {
+        "_comment" : "BMAJ and BMIN in arcsec, BPA in degrees, freq in MHz",
+        "BMAJ" : 45.0,
+        "BMIN" : 45.0,
+        "BPA" : 90.0,
+        "freq" : 1400.0
+}
