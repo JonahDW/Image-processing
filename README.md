@@ -18,7 +18,8 @@ Extract this somewhere on a permanent location on your filesystem.
 Choose between outputting a catalog of sources or a mask file of Gaussians. Input parameters for PyBDSF are located in `bdsf_args_cat.json` and `bdsf_args_mask.json` in the `parsets` folder for cataloging and masking respectively.
 
 ```
-usage: sourcefinding.py [-h] [-s SIZE] [--plot [PLOT]] mode image
+usage: sourcefinding.py [-h] [-s SIZE] [--plot [PLOT]] [--spectral_index]
+                        mode image
 
 positional arguments:
   mode                  Purpose of the sourcefinding, choose between
@@ -34,6 +35,11 @@ optional arguments:
   --plot [PLOT]         Plot the results of the sourcefinding as a png of the
                         image with sources overlaid, optionally provide an
                         output filename (default = do not plot the results).
+  --spectral_index      Measure the spectral indices in the .alpha and
+                        alpha.error images. (assuming they are in the same
+                        directory as the input image) and include them in the
+                        catalog. This requires CASA functionalities (default =
+                        do not measure spectral indices).
 ```
 
 ## catalog_matching.py
