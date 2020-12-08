@@ -35,8 +35,8 @@ def run_bdsf(image, argfile):
                   'psf_pa', 'psf_ratio', 'psf_ratio_aper', 'island_mask'
     kwargs -- Extra keyword arguments for pybdsf source finding
     '''
-    inp_image = os.path.splitext(image)[0]
-    outcatalog = inp_image+'_bdsfcat.fits'
+    imname = os.path.dirname(image) + '/' + os.path.basename(image).split('.')[0]
+    outcatalog = imname+'_bdsfcat.fits'
 
     path = Path(__file__).parent / argfile
     with open(path) as f:
@@ -46,11 +46,70 @@ def run_bdsf(image, argfile):
 
     for img_type in args_dict['export_image']:
         if args_dict['export_image'][img_type]:
-            img.export_image(outfile=inp_image+'_'+img_type+'.fits', clobber=True, img_type=img_type)
+            img.export_image(outfile=imname+'_'+img_type+'.fits', clobber=True, img_type=img_type)
 
     img.write_catalog(outfile = outcatalog, **args_dict['write_catalog'])
 
     return outcatalog
+
+def read_alpha(imname, catalog, regions):
+    '''
+    Determine spectral indices of the sources
+    '''
+    os.system(f'casa --nologfile -c smooth_alpha.py {imname}')
+    dirname = os.path.dirname(imname)
+
+    alpha = fits.open(dirname+'/smooth_alpha.fits')
+    alpha_err = fits.open(dirname+'/smooth_alpha_error.fits')
+
+    wcs = WCS(alpha[0].header)
+
+    pixel_regions = [region.to_pixel(wcs) for region in regions]
+    image = alpha[0].data[0,0,:,:]
+    err_image = alpha_err[0].data[0,0,:,:]
+
+    alpha_list = []
+    alpha_err_list = []
+    for i, source in enumerate(catalog):
+        pixel_region = pixel_regions[i]
+
+        mask = pixel_region.to_mask(mode='center')
+        mask_data = mask.to_image(image.shape).astype(bool)
+
+        alpha_values = image[mask_data]
+        alpha_err_values = err_image[mask_data]
+
+        alpha_values = alpha_values[~np.isnan(alpha_values)]
+        alpha_err_values = alpha_err_values[~np.isnan(alpha_err_values)]
+
+        alpha_values = alpha_values[alpha_err_values < 1.0]
+        alpha_err_values = alpha_err_values[alpha_err_values < 1.0]
+
+        if len (alpha_values) > 0:
+            alpha_tot = np.sum(alpha_values/alpha_err_values)/np.sum(1/alpha_err_values)
+            alpha_err_tot = np.mean(alpha_err_values)
+
+            alpha_list.append(alpha_tot)
+            alpha_err_list.append(alpha_err_tot)
+        else:
+            alpha_list.append(np.ma.masked)
+            alpha_err_list.append(np.ma.masked)
+
+    catalog['alpha'] = np.asarray(alpha_list)
+    catalog['alpha_err'] = np.asarray(alpha_err_list)
+
+    # Clean up
+    os.remove(dirname+'/smooth_alpha.fits')
+    os.remove(dirname+'/smooth_alpha_error.fits')
+
+    path = Path(__file__).parent
+    files = os.listdir(path)
+
+    for f in files:
+        if f.endswith('.last'):
+            os.remove(f)
+
+    return catalog
 
 def transform_cat(catalog):
     '''
@@ -105,7 +164,7 @@ def write_mask(outfile, regions, size=1.0):
             region.height *= size
             region.width *= size
 
-    print(f'Wrote mask file {outfile}')
+    print(f'Wrote mask file to {outfile}')
     write_crtf(regions, outfile)
 
 def plot_sf_results(image_file, rms_image, regions, plot):
@@ -121,7 +180,7 @@ def plot_sf_results(image_file, rms_image, regions, plot):
 
     fig = plt.figure(figsize=(20,20))
     ax = plt.subplot(projection=wcs)
-    ax.imshow(img/rms_img, origin='lower', cmap='gist_gray', vmin=0, vmax=5)
+    ax.imshow(img/rms_img, origin='lower', cmap='bone', vmin=0, vmax=5)
     ax.set_xlabel('RA')
     ax.set_ylabel('DEC')
 
@@ -144,28 +203,37 @@ def main():
     mode = args.mode
     size = args.size
     plot = args.plot
+    spectral_index = args.spectral_index
+
+    imname = os.path.dirname(inpimage) + '/' + os.path.basename(inpimage).split('.')[0]
 
     if mode in 'cataloging':
-        outcat = run_bdsf(inpimage, argfile='parsets/bdsf_args_cat.json')
-        bdsf_cat = Table.read(outcat)
-        bdsf_cat = transform_cat(bdsf_cat)
-        bdsf_regions = catalog_to_regions(bdsf_cat)
-
-        outfile = os.path.splitext(inpimage)[0]+'_catalog.fits'
-        print(f'Wrote catalog to {outfile}')
-        bdsf_cat.write(outfile, overwrite=True)
-
+        bdsf_args = 'parsets/bdsf_args_cat.json'
     elif mode in 'masking':
-        outcat = run_bdsf(inpimage, argfile='parsets/bdsf_args_mask.json')
-        bdsf_cat = Table.read(outcat)
-        bdsf_regions = catalog_to_regions(bdsf_cat)
-        write_mask(outfile = inpimage+'_mask.crtf', regions=bdsf_regions, size=size)
+        bdsf_args = 'parsets/bdsf_args_mask.json'
     else:
         print(f'Invalid mode {mode}, please choose between c(ataloging) or m(atching)')
 
+    outcat = run_bdsf(inpimage, argfile=bdsf_args)
+    bdsf_cat = Table.read(outcat)
+    bdsf_regions = catalog_to_regions(bdsf_cat)
+
     if plot:
-        inpimage = os.path.splitext(inpimage)[0]
-        plot_sf_results(f'{inpimage}_ch0.fits', f'{inpimage}_rms.fits', bdsf_regions, plot)
+        plot_sf_results(f'{imname}_ch0.fits', f'{imname}_rms.fits', bdsf_regions, plot)
+
+    if spectral_index:
+        bdsf_cat = read_alpha(imname, bdsf_cat, bdsf_regions)
+
+    # Determine output by mode
+    if mode in 'cataloging':
+        outfile = imname+'_catalog.fits'
+        bdsf_cat = transform_cat(bdsf_cat)
+        print(f'Wrote catalog to {outfile}')
+        bdsf_cat.write(outfile, overwrite=True)
+
+    if mode in 'masking':
+        bdsf_cat.write(outcat, overwrite=True)
+        write_mask(outfile=imname+'_mask.crtf', regions=bdsf_regions, size=size)
 
 def new_argument_parser():
 
@@ -186,6 +254,13 @@ def new_argument_parser():
                                 of the image with sources overlaid, optionally
                                 provide an output filename (default = do
                                 not plot the results).""")
+    parser.add_argument("--spectral_index", action='store_true',
+                        help="""Measure the spectral indices in the .alpha and
+                                alpha.error images. (assuming they are in the
+                                same directory as the input image) and include
+                                them in the catalog. This requires CASA
+                                functionalities (default = do not measure
+                                spectral indices).""")
     return parser
 
 if __name__ == '__main__':

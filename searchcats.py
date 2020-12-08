@@ -83,7 +83,7 @@ def getsumssdata(ra,dec,offset):
                                                                alwayssign=True,
                                                                pad=True)) for coord in sumss_coordinates]
 
-        sumsstable.add_columns([summsids, sumss_coordinates.ra,sumss_coordinates.dec],
+        sumsstable.add_columns([sumssids, sumss_coordinates.ra,sumss_coordinates.dec],
                                 indexes=[0,0,0],
                                 names=['SUMSS_id','RA','DEC'])
 

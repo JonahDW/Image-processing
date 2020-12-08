@@ -307,20 +307,14 @@ def plot_fluxes(pointing, ext, matches, datadir, fluxtype, flux, dpi):
     dFlux = np.array(int_flux)/np.array(ext_flux)
     center_dist = np.sqrt(np.array(RA_off)**2 + np.array(DEC_off)**2)
 
-    # Get MeerKAT primary beam
-    offset_range = np.linspace(0,max(center_dist),100)
-    pb = helpers.meerkat_lpb(0.9583, 1.189, 1.3, offset_range)
-
     fig, ax = plt.subplots()
 
     ax.set_yscale('log')
     ax.scatter(center_dist, dFlux, color='k', marker='.', s=5)
-    ax.plot(offset_range, pb, color='k', label='MeerKAT primary beam model')
 
     ax.set_title(f'Flux ratio of {len(dFlux)} sources')
     ax.set_xlabel('Distance from pointing center (degrees)')
     ax.set_ylabel('Flux ratio')
-    ax.legend()
 
     if flux is True:
         plt.savefig(datadir+'/match_fluxes.png', dpi=dpi)
@@ -410,7 +404,7 @@ def new_argument_parser():
                         help="""External catalog to match to, choice between
                                 NVSS, SUMMS, FIRST or a file. If the external
                                 catalog is a PyBDSF catalog, make sure the filename
-                                has 'bdsfcat' in it. If a different catalog, the 
+                                has 'bdsfcat' in it. If a different catalog, the
                                 parsets/extcat.json file must be used to specify its
                                 details (default NVSS).""")
     parser.add_argument('-d', '--dpi', default=300,
@@ -428,7 +422,7 @@ def new_argument_parser():
                                 the flux ratio (default = Total).""")
     parser.add_argument("--alpha", default=0.7,
                         help="""The spectral slope to assume for calculating the
-                                flux ratio, where Flux_1 = Flux_2 * (freq_1/freq_2)^-alpha 
+                                flux ratio, where Flux_1 = Flux_2 * (freq_1/freq_2)^-alpha
                                 (default = 0.7)""")
     parser.add_argument("--output", nargs="?", const=True,
                         help="""Output the result of the matching into a catalog,

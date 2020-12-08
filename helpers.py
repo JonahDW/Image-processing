@@ -45,7 +45,7 @@ def get_beam(identity, ra_center, dec_center):
                 if (ra_center > (21*15)) or (ra_center < (3*15)):
                     BMaj = beam_dict[identity]['Maj3']
     if identity=='SUMSS':
-        BMaj = Maj/np.sin(np.radians(dec_center))
+        BMaj = BMaj/np.sin(np.radians(dec_center))
 
     beam = [BMaj,BMin,BPA]
     return beam, freq
