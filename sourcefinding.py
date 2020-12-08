@@ -35,7 +35,7 @@ def run_bdsf(image, argfile):
                   'psf_pa', 'psf_ratio', 'psf_ratio_aper', 'island_mask'
     kwargs -- Extra keyword arguments for pybdsf source finding
     '''
-    imname = os.path.dirname(image) + '/' + os.path.basename(image).split('.')[0]
+    imname = os.path.join(os.path.dirname(image),os.path.basename(image).split('.')[0])
     outcatalog = imname+'_bdsfcat.fits'
 
     path = Path(__file__).parent / argfile
@@ -56,11 +56,13 @@ def read_alpha(imname, catalog, regions):
     '''
     Determine spectral indices of the sources
     '''
-    os.system(f'casa --nologfile -c smooth_alpha.py {imname}')
+    path = Path(__file__).parent
+
+    os.system(f'casa --nologfile -c {os.path.join(path,'smooth_alpha.py')} {imname}')
     dirname = os.path.dirname(imname)
 
-    alpha = fits.open(dirname+'/smooth_alpha.fits')
-    alpha_err = fits.open(dirname+'/smooth_alpha_error.fits')
+    alpha = fits.open(os.path.join(dirname,'smooth_alpha.fits'))
+    alpha_err = fits.open(os.path.join(dirname,'smooth_alpha_error.fits'))
 
     wcs = WCS(alpha[0].header)
 
@@ -95,18 +97,16 @@ def read_alpha(imname, catalog, regions):
             alpha_list.append(np.ma.masked)
             alpha_err_list.append(np.ma.masked)
 
-    catalog['alpha'] = np.asarray(alpha_list)
-    catalog['alpha_err'] = np.asarray(alpha_err_list)
+    catalog['alpha'] = alpha_list
+    catalog['alpha_err'] = alpha_err_list
 
     # Clean up
-    os.remove(dirname+'/smooth_alpha.fits')
-    os.remove(dirname+'/smooth_alpha_error.fits')
+    os.remove(os.path.join(dirname,'smooth_alpha.fits'))
+    os.remove(os.path.join(dirname,'smooth_alpha_error.fits'))
 
-    path = Path(__file__).parent
-    files = os.listdir(path)
-
+    files = os.listdir('.')
     for f in files:
-        if f.endswith('.last'):
+        if f.endswith('.last') or f.endswith('false'):
             os.remove(f)
 
     return catalog
@@ -205,7 +205,7 @@ def main():
     plot = args.plot
     spectral_index = args.spectral_index
 
-    imname = os.path.dirname(inpimage) + '/' + os.path.basename(inpimage).split('.')[0]
+    imname = os.path.join(os.path.dirname(inpimage),os.path.basename(inpimage).split('.')[0])
 
     if mode in 'cataloging':
         bdsf_args = 'parsets/bdsf_args_cat.json'

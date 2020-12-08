@@ -82,7 +82,6 @@ class ExternalCatalog():
             self.BPA = cat_info['properties']['BPA']
             self.freq = cat_info['properties']['freq']
 
-
 class Pointing():
 
     def __init__(self, catalog):
@@ -336,7 +335,7 @@ def write_to_catalog(pointing, ext, matches, output, datadir, pointing_name):
     out = join(ext.cat, pointing.cat, keys='idx')
 
     if output is True:
-        filename = f'{datadir}/match_{ext.name}_{pointing_name}.fits'
+        filename = os.path.join(datadir, f'match_{ext.name}_{pointing_name}.fits')
         out.write(filename, overwrite=True, format='fits')
     else:
         out.write(output, overwrite=True, format='fits')
