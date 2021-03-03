@@ -4,6 +4,8 @@ import json
 import ast
 
 import numpy as np
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 from argparse import ArgumentParser
@@ -15,7 +17,7 @@ from astropy import units as u
 from astropy.table import Table, Column
 from astropy.coordinates import SkyCoord
 
-from regions import EllipseSkyRegion, read_crtf, write_crtf
+from regions import EllipseSkyRegion, write_crtf, write_ds9
 
 import bdsf
 
@@ -58,7 +60,7 @@ def read_alpha(imname, catalog, regions):
     '''
     path = Path(__file__).parent
 
-    os.system(f'casa --nologfile -c {os.path.join(path,'smooth_alpha.py')} {imname}')
+    os.system(f'casa --nologfile -c {os.path.join(path,"smooth_alpha.py")} {imname}')
     dirname = os.path.dirname(imname)
 
     alpha = fits.open(os.path.join(dirname,'smooth_alpha.fits'))

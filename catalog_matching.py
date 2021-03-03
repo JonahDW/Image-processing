@@ -84,7 +84,10 @@ class ExternalCatalog():
 
 class Pointing():
 
-    def __init__(self, catalog):
+    def __init__(self, catalog, filename):
+        self.dirname = os.path.dirname(filename)
+        self.name = os.path.basename(filename).split('.')[0].split('_')[0]
+
         self.cat = catalog
         self.sources = [SourceEllipse(source) for source in catalog]
 
@@ -100,6 +103,7 @@ class Pointing():
         # Parse meta
         header = dict([x.split(' = ') for x in catalog.meta['comments'][4:]])
 
+        self.telescope = header['TELESCOP']
         self.BMaj = float(header['BMAJ'])*3600 #arcsec
         self.BMin = float(header['BMIN'])*3600 #arcsec
         self.BPA = float(header['BPA'])
@@ -184,7 +188,7 @@ def match_catalogs(pointing, ext):
 
     return matches
 
-def plot_catalog_match(pointing, ext, matches, datadir, dpi):
+def plot_catalog_match(pointing, ext, matches, dpi):
     '''
     Plot the field with all the matches in it as ellipses
     '''
@@ -218,10 +222,10 @@ def plot_catalog_match(pointing, ext, matches, datadir, dpi):
     ax.set_xlabel('RA (degrees)')
     ax.set_ylabel('DEC (degrees)')
 
-    plt.savefig(datadir+'/catalog_match.png', dpi=dpi, bbox_inches='tight')
+    plt.savefig(os.path.join(pointing.dirname,f'match_{ext.name}_{pointing.name}_shapes.png'), dpi=dpi, bbox_inches='tight')
     plt.close()
 
-def plot_astrometrics(pointing, ext, matches, datadir, astro, dpi):
+def plot_astrometrics(pointing, ext, matches, astro, dpi):
     '''
     Plot astrometric offsets of sources to the reference catalog
     '''
@@ -250,7 +254,7 @@ def plot_astrometrics(pointing, ext, matches, datadir, astro, dpi):
                            height=2*pointing.BMaj,
                            facecolor='none',
                            edgecolor='k',
-                           label='MeerKAT beam')
+                           label=f'{pointing.telescope} beam')
     ax.add_patch(ext_beam_ell)
     ax.add_patch(int_beam_ell)
 
@@ -270,12 +274,12 @@ def plot_astrometrics(pointing, ext, matches, datadir, astro, dpi):
     ax.legend()
 
     if astro is True:
-        plt.savefig(datadir+'/match_astrometrics.png', dpi=dpi)
+        plt.savefig(os.path.join(pointing.dirname,f'match_{ext.name}_{pointing.name}_astrometrics.png'), dpi=dpi)
     else:
         plt.savefig(astro, dpi=dpi)
     plt.close()
 
-def plot_fluxes(pointing, ext, matches, datadir, fluxtype, flux, dpi):
+def plot_fluxes(pointing, ext, matches, fluxtype, flux, dpi):
     '''
     Plot flux offsets of sources to the reference catalog
     '''
@@ -308,20 +312,19 @@ def plot_fluxes(pointing, ext, matches, datadir, fluxtype, flux, dpi):
 
     fig, ax = plt.subplots()
 
-    ax.set_yscale('log')
     ax.scatter(center_dist, dFlux, color='k', marker='.', s=5)
 
     ax.set_title(f'Flux ratio of {len(dFlux)} sources')
     ax.set_xlabel('Distance from pointing center (degrees)')
-    ax.set_ylabel('Flux ratio')
+    ax.set_ylabel(f'Flux ratio ({fluxtype} flux)')
 
     if flux is True:
-        plt.savefig(datadir+'/match_fluxes.png', dpi=dpi)
+        plt.savefig(os.path.join(pointing.dirname,f'match_{ext.name}_{pointing.name}_fluxes.png'), dpi=dpi)
     else:
         plt.savefig(flux, dpi=dpi)
     plt.close()
 
-def write_to_catalog(pointing, ext, matches, output, datadir, pointing_name):
+def write_to_catalog(pointing, ext, matches, output):
     '''
     Write the matched catalogs to a fits file
     '''
@@ -335,7 +338,7 @@ def write_to_catalog(pointing, ext, matches, output, datadir, pointing_name):
     out = join(ext.cat, pointing.cat, keys='idx')
 
     if output is True:
-        filename = os.path.join(datadir, f'match_{ext.name}_{pointing_name}.fits')
+        filename = os.path.join(pointing.dirname, f'match_{ext.name}_{pointing_name}.fits')
         out.write(filename, overwrite=True, format='fits')
     else:
         out.write(output, overwrite=True, format='fits')
@@ -354,11 +357,8 @@ def main():
     flux = args.flux
     output = args.output
 
-    datadir = os.path.dirname(pointing)
-    filename = os.path.splitext(os.path.basename(pointing))[0]
-
     pointing_cat = Table.read(pointing)
-    pointing = Pointing(pointing_cat)
+    pointing = Pointing(pointing_cat, pointing)
 
     if ext_cat == 'NVSS':
         ext_table = pointing.query_NVSS()
@@ -384,21 +384,21 @@ def main():
         exit()
 
     matches = match_catalogs(pointing, ext_catalog)
-    plot_catalog_match(pointing, ext_catalog, matches, datadir, dpi)
+#   plot_catalog_match(pointing, ext_catalog, matches, dpi)
 
     if astro:
-        plot_astrometrics(pointing, ext_catalog, matches, datadir, astro, dpi)
+        plot_astrometrics(pointing, ext_catalog, matches, astro, dpi)
     if flux:
-        plot_fluxes(pointing, ext_catalog, matches, datadir, fluxtype, flux, dpi)
+        plot_fluxes(pointing, ext_catalog, matches, fluxtype, flux, dpi)
     if output:
-        write_to_catalog(pointing, ext_catalog, matches, output, datadir, filename)
+        write_to_catalog(pointing, ext_catalog, matches, output)
 
 def new_argument_parser():
 
     parser = ArgumentParser()
 
     parser.add_argument("pointing",
-                        help="""MeerKAT pointing catalog made by PyBDSF.""")
+                        help="""Pointing catalog made by PyBDSF.""")
     parser.add_argument("ext_cat", default="NVSS",
                         help="""External catalog to match to, choice between
                                 NVSS, SUMMS, FIRST or a file. If the external

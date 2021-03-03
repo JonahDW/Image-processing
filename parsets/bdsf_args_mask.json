@@ -1,7 +1,7 @@
 {
     "process_image" : {
-        "thresh_pix" : 20.0,
-        "thresh_isl" : 10.0,
+        "thresh_pix" : 10.0,
+        "thresh_isl" : 7.0,
         "adaptive_rms_box" : true,
         "adaptive_thresh" : 100.0
     },
