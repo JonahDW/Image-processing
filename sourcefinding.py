@@ -205,6 +205,7 @@ def main():
     mode = args.mode
     size = args.size
     plot = args.plot
+    ds9 = args.ds9
     spectral_index = args.spectral_index
 
     imname = os.path.join(os.path.dirname(inpimage),os.path.basename(inpimage).split('.')[0])
@@ -225,6 +226,11 @@ def main():
 
     if spectral_index:
         bdsf_cat = read_alpha(imname, bdsf_cat, bdsf_regions)
+
+    if ds9:
+        outfile = imname+'.reg'
+        print(f'Wrote ds9 region file to {outfile}')
+        write_ds9(bdsf_regions, outfile)
 
     # Determine output by mode
     if mode in 'cataloging':
@@ -251,6 +257,9 @@ def new_argument_parser():
     parser.add_argument("-s", "--size", default=1.0,
                         help="""If masking, multiply the size of the masks by this
                                 amount (default = 1.0).""")
+    parser.add_argument("--ds9", action='store_true',
+                        help="""Write the sources found to a ds9 region file
+                                (default = create a region file).""")
     parser.add_argument("--plot", nargs="?", const=True,
                         help="""Plot the results of the sourcefinding as a png
                                 of the image with sources overlaid, optionally
