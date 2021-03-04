@@ -18,7 +18,8 @@ Extract this somewhere on a permanent location on your filesystem.
 Choose between outputting a catalog of sources or a mask file of Gaussians. Input parameters for PyBDSF are located in `bdsf_args_cat.json` and `bdsf_args_mask.json` in the `parsets` folder for cataloging and masking respectively.
 
 ```
-usage: sourcefinding.py [-h] [-s SIZE] [--plot [PLOT]] [--spectral_index]
+usage: sourcefinding.py [-h] [-s SIZE] [--ds9] [--plot [PLOT]]
+                        [--spectral_index]
                         mode image
 
 positional arguments:
@@ -32,6 +33,8 @@ optional arguments:
   -h, --help            show this help message and exit
   -s SIZE, --size SIZE  If masking, multiply the size of the masks by this
                         amount (default = 1.0).
+  --ds9                 Write the sources found to a ds9 region file (default
+                        = create a region file).
   --plot [PLOT]         Plot the results of the sourcefinding as a png of the
                         image with sources overlaid, optionally provide an
                         output filename (default = do not plot the results).
