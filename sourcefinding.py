@@ -125,7 +125,7 @@ def transform_cat(catalog):
                                                      sep='',
                                                      precision=0,
                                                      pad=True),
-                                  coord.dec.to_string(sep='',
+                                 coord.dec.to_string(sep='',
                                                       precision=0,
                                                       alwayssign=True,
                                                       pad=True)) for coord in coordinates]
@@ -228,6 +228,10 @@ def main():
         bdsf_cat = read_alpha(imname, bdsf_cat, bdsf_regions)
 
     if ds9:
+        if ds9 is True:
+            pass
+        else:
+            bdsf_regions = [bdsf_regions[i] for i in np.argpartition(-bdsf_cat['Peak_flux'], int(ds9))[:5]]
         outfile = imname+'.reg'
         print(f'Wrote ds9 region file to {outfile}')
         write_ds9(bdsf_regions, outfile)
@@ -257,9 +261,11 @@ def new_argument_parser():
     parser.add_argument("-s", "--size", default=1.0,
                         help="""If masking, multiply the size of the masks by this
                                 amount (default = 1.0).""")
-    parser.add_argument("--ds9", action='store_true',
-                        help="""Write the sources found to a ds9 region file
-                                (default = create a region file).""")
+    parser.add_argument("--ds9", nargs="?", const=True,
+                        help="""Write the sources found to a ds9 region file,
+                                optionally give a number n, only the n brightest
+                                sources will be included in the file
+                                (default = do not create a region file).""")
     parser.add_argument("--plot", nargs="?", const=True,
                         help="""Plot the results of the sourcefinding as a png
                                 of the image with sources overlaid, optionally
