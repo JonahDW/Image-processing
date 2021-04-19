@@ -83,9 +83,11 @@ def getsumssdata(ra,dec,offset):
                                                                alwayssign=True,
                                                                pad=True)) for coord in sumss_coordinates]
 
-        sumsstable.add_columns([sumssids, sumss_coordinates.ra,sumss_coordinates.dec],
-                                indexes=[0,0,0],
-                                names=['SUMSS_id','RA','DEC'])
+        sumssids = Column(sumssids, name='SUMSS_id')
+        sumss_ra = Column(sumss_coordinates.ra, name='RA')
+        sumss_dec = Column(sumss_coordinates.dec, name='DEC')
+        sumsstable.add_columns([sumssids,sumss_ra,sumss_dec],
+                           indexes=[0,0,0])
 
         # Match SUMSS catalog to RA and DEC within offset
         d2d = center.separation(sumss_coordinates)
@@ -168,10 +170,11 @@ def getfirstdata(ra,dec,offset):
                                                                alwayssign=True,
                                                                pad=True)) for coord in first_coordinates]
 
-        table.add_columns([firstids,first_coordinates.ra,first_coordinates.dec],
-                           indexes=[0,0,0],
-                           names=['FIRST_id','RA','DEC'])
-
+        firstids = Column(firstids, name='FIRST_id')
+        first_ra = Column(first_coordinates.ra, name='RA')
+        first_dec = Column(first_coordinates.dec, name='DEC')
+        table.add_columns([firstids,first_ra,first_dec],
+                           indexes=[0,0,0])
 
         if x == 0:
             firsttable = table
