@@ -157,8 +157,14 @@ def getfirstdata(ra,dec,offset):
                            exclude_names=exclude_columns,
                            guess=False)
 
-        first_coordinates = SkyCoord([[source[11:23]] for source in urldata[15:-1]],
-                                     [[source[24:35]] for source in urldata[15:-1]],
+        # Find first line that is not commented
+        for i, line in enumerate(urldata):
+            if not line.startswith('#'):
+                data_start = i
+                break
+
+        first_coordinates = SkyCoord([[source[11:23]] for source in urldata[data_start:-1]],
+                                     [[source[24:35]] for source in urldata[data_start:-1]],
                                      unit=(u.hourangle,u.deg))
 
         firstids = ['FIRST J{0}{1}'.format(coord.ra.to_string(unit=u.hourangle,

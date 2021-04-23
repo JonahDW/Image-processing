@@ -338,7 +338,7 @@ def write_to_catalog(pointing, ext, matches, output):
     out = join(ext.cat, pointing.cat, keys='idx')
 
     if output is True:
-        filename = os.path.join(pointing.dirname, f'match_{ext.name}_{pointing_name}.fits')
+        filename = os.path.join(pointing.dirname, f'match_{ext.name}_{pointing.name}.fits')
         out.write(filename, overwrite=True, format='fits')
     else:
         out.write(output, overwrite=True, format='fits')
