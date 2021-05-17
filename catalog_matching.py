@@ -372,7 +372,7 @@ def main():
     elif os.path.exists(ext_cat):
         ext_table = Table.read(ext_cat)
         if 'bdsfcat' in ext_cat:
-            ext_catalog = Pointing(ext_table)
+            ext_catalog = Pointing(ext_table, ext_cat)
         else:
             ext_catalog = ExternalCatalog(ext_cat, ext_table, pointing.center)
     else:

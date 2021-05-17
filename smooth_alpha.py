@@ -2,7 +2,7 @@ import sys
 import os
 import shutil
 
-imname = sys.argv[3]
+imname = sys.argv[1]
 
 dirname = os.path.dirname(imname)
 
