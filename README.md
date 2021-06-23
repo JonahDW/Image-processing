@@ -83,3 +83,21 @@ optional arguments:
                        optionally provide an output filename (default = don't
                        output a catalog).
 ```
+
+## Catalog_analysis.py
+
+Analyze a PyBDSF catalog with different metrics regularly applied to radio astronomical data, like source counts and fraction of resolved sources.
+
+```
+usage: catalog_analysis.py [-h] [-r RMS_IMAGE] [-d DPI] catalog
+
+positional arguments:
+  catalog               Pointing catalog made by PyBDSF.
+
+optional arguments:
+  -h, --help            show this help message and exit
+  -r RMS_IMAGE, --rms_image RMS_IMAGE
+                        Specify input rms image for the calculation of
+                        differential number counts.
+  -d DPI, --dpi DPI     DPI of the output images (default = 300).
+```

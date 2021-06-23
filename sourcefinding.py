@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 import os
 import sys
 import json
@@ -27,15 +29,8 @@ def run_bdsf(image, argfile):
 
     Keyword arguments:
     image -- Name of image
-    catalog_type -- How sources are combined in catalog, i.e.
-                    'gaul' for a list of Gaussians (for masking)
-                    'srl' for a list of sources (for cataloging)
-    output_imgs -- Specify additional output images produced by
-                   bdsf. Options are: 'gaus_resid',
-                  'shap_resid', 'rms', 'mean', 'gaus_model',
-                  'shap_model', 'ch0', 'pi', 'psf_major', 'psf_minor',
-                  'psf_pa', 'psf_ratio', 'psf_ratio_aper', 'island_mask'
-    kwargs -- Extra keyword arguments for pybdsf source finding
+    argfile -- Input json file containing arguments
+               for bdsf functions
     '''
     imname = os.path.join(os.path.dirname(image),os.path.basename(image).split('.')[0])
     outcatalog = imname+'_bdsfcat.fits'
@@ -44,7 +39,10 @@ def run_bdsf(image, argfile):
     with open(path) as f:
         args_dict = json.load(f)
 
-    img = bdsf.process_image(image, **args_dict['process_image'])
+    img = bdsf.process_image(image,
+                            rms_box=(150,15),
+                            rms_box_bright=(50,15),
+                            **args_dict['process_image'])
 
     for img_type in args_dict['export_image']:
         if args_dict['export_image'][img_type]:
@@ -115,7 +113,7 @@ def read_alpha(imname, catalog, regions):
 
 def transform_cat(catalog):
     '''
-    Add names for sources in the catalog
+    Add names for sources in the catalog following IAU naming conventions
     '''
     coordinates = SkyCoord([source['RA'] for source in catalog],
                            [source['DEC'] for source in catalog],

@@ -1,5 +1,6 @@
 import string
 import os
+import sys
 import urllib
 import gzip
 import time
@@ -113,7 +114,7 @@ def getfirstdata(ra,dec,offset):
 
     if not firsturl:
         print("No FIRST data available.")
-        return firstdata
+        sys.exit()
 
     urldata=firsturl.split('\n')
     numsources=0
@@ -121,7 +122,7 @@ def getfirstdata(ra,dec,offset):
         if len(tempstr)>0 and tempstr.split()[len(tempstr.split())-1]=='arcsec':
             if tempstr.split()[1]=='No':
                 print("No FIRST data available.")
-                return firstdata
+                sys.exit()
             else:
                 numsources=float(tempstr.split()[1])
                 break
@@ -238,6 +239,10 @@ def getnvssdata(ra,dec,offset):
         nvssfiturldata = nvssfiturl.split('\n')
 
         nvssdata=filternvssfile(nvssfiturldata)
+
+        if not nvssdata:
+            print("No NVSS data available.")
+            sys.exit()
 
         nvsstable = ascii.read(nvssdata,
                                format='fixed_width_no_header',

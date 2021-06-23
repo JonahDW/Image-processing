@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 import os
 import sys
 import numpy as np
@@ -91,19 +93,10 @@ class Pointing():
         self.cat = catalog
         self.sources = [SourceEllipse(source) for source in catalog]
 
-        self.RAmax = catalog['RA'].max()
-        self.RAmin = catalog['RA'].min()
-        self.DECmax = catalog['DEC'].max()
-        self.DECmin = catalog['DEC'].min()
-
-        self.dDEC = (self.DECmax - self.DECmin)*u.degree
-        self.dRA = (self.RAmax - self.RAmin)*u.degree
-        self.fov = max(self.dDEC,self.dRA)
-
         # Parse meta
         header = dict([x.split(' = ') for x in catalog.meta['comments'][4:]])
 
-        self.telescope = header['TELESCOP']
+        self.telescope = header['TELESCOP'].replace("'","")
         self.BMaj = float(header['BMAJ'])*3600 #arcsec
         self.BMin = float(header['BMIN'])*3600 #arcsec
         self.BPA = float(header['BPA'])
@@ -111,12 +104,14 @@ class Pointing():
 
         self.center = SkyCoord(float(header['OBSRA'])*u.degree,
                                float(header['OBSDEC'])*u.degree)
+        dec_fov = abs(float(header['CDELT1']))*float(header['CRPIX1'])*2
+        self.fov = dec_fov/np.cos(self.center.dec.rad) * u.degree
 
     def query_NVSS(self):
         '''
         Match the pointing to the NVSS catalog
         '''
-        nvsstable = sc.getnvssdata(ra= [self.center.ra.to_string(u.hourangle, sep=' ')],
+        nvsstable = sc.getnvssdata(ra = [self.center.ra.to_string(u.hourangle, sep=' ')],
                                    dec = [self.center.dec.to_string(u.deg, sep=' ')],
                                    offset = 0.5*self.fov.to(u.arcsec))
 
@@ -137,7 +132,7 @@ class Pointing():
         '''
         Match the pointing to the FIRST catalog
         '''
-        firsttable = sc.getfirstdata(ra= [self.center.ra.to_string(u.hourangle, sep=' ')],
+        firsttable = sc.getfirstdata(ra = [self.center.ra.to_string(u.hourangle, sep=' ')],
                                      dec = [self.center.dec.to_string(u.deg, sep=' ')],
                                      offset = 0.5*self.fov.to(u.arcsec))
 
@@ -159,7 +154,11 @@ class Pointing():
         Match the pointing to the SUMSS catalog. This is very slow since
         SUMSS does not offer a catalog search so we match to the entire catalog
         '''
-        sumsstable = sc.getsumssdata(ra= self.center.ra,
+        if self.center.dec.deg > -29.5:
+            print('Catalog outside of SUMSS footprint')
+            sys.exit()
+
+        sumsstable = sc.getsumssdata(ra = self.center.ra,
                                      dec = self.center.dec,
                                      offset = 0.5*self.fov)
 
@@ -188,7 +187,7 @@ def match_catalogs(pointing, ext):
 
     return matches
 
-def plot_catalog_match(pointing, ext, matches, dpi):
+def plot_catalog_match(pointing, ext, matches, plot, dpi):
     '''
     Plot the field with all the matches in it as ellipses
     '''
@@ -222,7 +221,11 @@ def plot_catalog_match(pointing, ext, matches, dpi):
     ax.set_xlabel('RA (degrees)')
     ax.set_ylabel('DEC (degrees)')
 
-    plt.savefig(os.path.join(pointing.dirname,f'match_{ext.name}_{pointing.name}_shapes.png'), dpi=dpi, bbox_inches='tight')
+    if plot is True:
+        plt.savefig(os.path.join(pointing.dirname,f'match_{ext.name}_{pointing.name}_shapes.png'), dpi=dpi, bbox_inches='tight')
+    else:
+        plt.savefig(plot, dpi=dpi)
+
     plt.close()
 
 def plot_astrometrics(pointing, ext, matches, astro, dpi):
@@ -243,15 +246,15 @@ def plot_astrometrics(pointing, ext, matches, astro, dpi):
     ax.scatter(dRA, dDEC, zorder=2, color='k', marker='.', s=5)
 
     ext_beam_ell = Ellipse(xy=(0,0),
-                           width=2*ext.BMin,
-                           height=2*ext.BMaj,
+                           width=ext.BMin,
+                           height=ext.BMaj,
                            facecolor='none',
                            edgecolor='b',
                            linestyle='dashed',
                            label=f'{ext.name} beam')
     int_beam_ell = Ellipse(xy=(0,0),
-                           width=2*pointing.BMin,
-                           height=2*pointing.BMaj,
+                           width=pointing.BMin,
+                           height=pointing.BMaj,
                            facecolor='none',
                            edgecolor='k',
                            label=f'{pointing.telescope} beam')
@@ -317,6 +320,7 @@ def plot_fluxes(pointing, ext, matches, fluxtype, flux, dpi):
     ax.set_title(f'Flux ratio of {len(dFlux)} sources')
     ax.set_xlabel('Distance from pointing center (degrees)')
     ax.set_ylabel(f'Flux ratio ({fluxtype} flux)')
+    ax.set_yscale('log')
 
     if flux is True:
         plt.savefig(os.path.join(pointing.dirname,f'match_{ext.name}_{pointing.name}_fluxes.png'), dpi=dpi)
@@ -355,6 +359,7 @@ def main():
 
     astro = args.astro
     flux = args.flux
+    plot= args.plot
     output = args.output
 
     pointing_cat = Table.read(pointing)
@@ -386,6 +391,8 @@ def main():
     matches = match_catalogs(pointing, ext_catalog)
 #   plot_catalog_match(pointing, ext_catalog, matches, dpi)
 
+    if plot:
+        plot_catalog_match(pointing, ext_catalog, matches, plot, dpi)
     if astro:
         plot_astrometrics(pointing, ext_catalog, matches, astro, dpi)
     if flux:
@@ -416,6 +423,10 @@ def new_argument_parser():
                         help="""Plot the flux ratios of the matches,
                                 optionally provide an output filename
                                 (default = don't plot flux ratio).""")
+    parser.add_argument("--plot", nargs="?", const=True,
+                        help="""Plot the field with the matched ellipses,
+                                optionally provide an output filename
+                                (default = don't plot the matched ellipses).""")
     parser.add_argument("--fluxtype", default="Total",
                         help="""Whether to use Total or Peak flux for determining
                                 the flux ratio (default = Total).""")
