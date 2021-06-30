@@ -114,7 +114,7 @@ def getfirstdata(ra,dec,offset):
 
     if not firsturl:
         print("No FIRST data available.")
-        sys.exit()
+        return None
 
     urldata=firsturl.split('\n')
     numsources=0
@@ -122,7 +122,7 @@ def getfirstdata(ra,dec,offset):
         if len(tempstr)>0 and tempstr.split()[len(tempstr.split())-1]=='arcsec':
             if tempstr.split()[1]=='No':
                 print("No FIRST data available.")
-                sys.exit()
+                return None
             else:
                 numsources=float(tempstr.split()[1])
                 break
@@ -242,7 +242,7 @@ def getnvssdata(ra,dec,offset):
 
         if not nvssdata:
             print("No NVSS data available.")
-            sys.exit()
+            return None
 
         nvsstable = ascii.read(nvssdata,
                                format='fixed_width_no_header',
@@ -253,6 +253,7 @@ def getnvssdata(ra,dec,offset):
                                guess=False)
         return nvsstable
 
+    nvsstable = []
     # Define NVSS columns for deconvolved values
     nvss_dc_columns = ['RA','DEC','Distance','Total_flux',
                        'DC_Maj','DC_Min','DC_PA','Res',
@@ -269,29 +270,30 @@ def getnvssdata(ra,dec,offset):
     nvssdctable = get_table(0, nvss_dc_columns)
     nvssfittable = get_table(1, nvss_fit_columns)
 
-    nvsstable = join(nvssdctable,
-                     nvssfittable,
-                     keys=['RA','DEC','Distance','Field','YPix','XPix'],
-                     table_names=['DC','FIT'])
+    if nvssdctable and nvssfittable:
+        nvsstable = join(nvssdctable,
+                         nvssfittable,
+                         keys=['RA','DEC','Distance','Field','YPix','XPix'],
+                         table_names=['DC','FIT'])
 
-    nvss_coordinates = SkyCoord(ra=nvsstable['RA'],
-                                dec=nvsstable['DEC'],
-                                unit=(u.hourangle, u.deg))
+        nvss_coordinates = SkyCoord(ra=nvsstable['RA'],
+                                    dec=nvsstable['DEC'],
+                                    unit=(u.hourangle, u.deg))
 
-    nvssids = ['NVSS J{0}{1}'.format(coord.ra.to_string(unit=u.hourangle,
-                                                        sep='',
-                                                        precision=0,
-                                                        pad=True),
-                                     coord.dec.to_string(sep='',
-                                                         precision=0,
-                                                         alwayssign=True,
-                                                         pad=True)) for coord in nvss_coordinates]
+        nvssids = ['NVSS J{0}{1}'.format(coord.ra.to_string(unit=u.hourangle,
+                                                            sep='',
+                                                            precision=0,
+                                                            pad=True),
+                                         coord.dec.to_string(sep='',
+                                                             precision=0,
+                                                             alwayssign=True,
+                                                             pad=True)) for coord in nvss_coordinates]
 
-    nvsstable['RA'] = nvss_coordinates.ra
-    nvsstable['DEC'] = nvss_coordinates.dec
+        nvsstable['RA'] = nvss_coordinates.ra
+        nvsstable['DEC'] = nvss_coordinates.dec
 
-    c = Column(nvssids, name='NVSS_id')
-    nvsstable.add_column(c, index=0)
-    nvsstable.remove_column('Distance')
+        c = Column(nvssids, name='NVSS_id')
+        nvsstable.add_column(c, index=0)
+        nvsstable.remove_column('Distance')
 
     return nvsstable

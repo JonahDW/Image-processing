@@ -12,6 +12,8 @@ from astropy import units as u
 from astropy.table import Table, join
 from astropy.coordinates import SkyCoord
 
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from matplotlib.patches import Ellipse
 
@@ -88,7 +90,6 @@ class Pointing():
 
     def __init__(self, catalog, filename):
         self.dirname = os.path.dirname(filename)
-        self.name = os.path.basename(filename).split('.')[0].split('_')[0]
 
         self.cat = catalog
         self.sources = [SourceEllipse(source) for source in catalog]
@@ -107,6 +108,8 @@ class Pointing():
         dec_fov = abs(float(header['CDELT1']))*float(header['CRPIX1'])*2
         self.fov = dec_fov/np.cos(self.center.dec.rad) * u.degree
 
+        self.name = header['OBJECT'].replace("'","")
+
     def query_NVSS(self):
         '''
         Match the pointing to the NVSS catalog
@@ -114,6 +117,9 @@ class Pointing():
         nvsstable = sc.getnvssdata(ra = [self.center.ra.to_string(u.hourangle, sep=' ')],
                                    dec = [self.center.dec.to_string(u.deg, sep=' ')],
                                    offset = 0.5*self.fov.to(u.arcsec))
+
+        if not nvsstable:
+            sys.exit()
 
         nvsstable['Maj'].unit = u.arcsec
         nvsstable['Min'].unit = u.arcsec
@@ -135,6 +141,9 @@ class Pointing():
         firsttable = sc.getfirstdata(ra = [self.center.ra.to_string(u.hourangle, sep=' ')],
                                      dec = [self.center.dec.to_string(u.deg, sep=' ')],
                                      offset = 0.5*self.fov.to(u.arcsec))
+
+        if not firsttable:
+            sys.exit()
 
         firsttable['Maj'].unit = u.arcsec
         firsttable['Min'].unit = u.arcsec
@@ -307,6 +316,9 @@ def plot_fluxes(pointing, ext, matches, fluxtype, flux, dpi):
     else:
         print(f'Invalid fluxtype {fluxtype}, choose between Total or Peak flux')
         sys.exit()
+
+    # Get proper angular offset
+    RA_off = (np.array(RA_off) + 180.) % 360. - 180.
 
     # Scale flux density to proper frequency
     ext_flux_corrected = np.array(ext_flux) * (pointing.freq/ext.freq)**-0.7

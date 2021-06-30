@@ -32,7 +32,9 @@ def run_bdsf(image, argfile):
     argfile -- Input json file containing arguments
                for bdsf functions
     '''
-    imname = os.path.join(os.path.dirname(image),os.path.basename(image).split('.')[0])
+    imname = os.path.join(os.path.dirname(image),
+                          os.path.basename(image).split('.')[0]+'_sf_output',
+                          os.path.basename(image).split('.')[0])
     outcatalog = imname+'_bdsfcat.fits'
 
     path = Path(__file__).parent / argfile
@@ -115,9 +117,15 @@ def transform_cat(catalog):
     '''
     Add names for sources in the catalog following IAU naming conventions
     '''
-    coordinates = SkyCoord([source['RA'] for source in catalog],
-                           [source['DEC'] for source in catalog],
-                           unit=(u.deg,u.deg))
+    header = dict([x.split(' = ') for x in catalog.meta['comments'][4:]])
+
+    pointing_center = SkyCoord(float(header['OBSRA'])*u.degree,
+                               float(header['OBSDEC'])*u.degree)
+    pointing_name = ['PT-'+header['OBJECT'].replace("'","")] * len(catalog)
+
+    source_coord = SkyCoord([source['RA'] for source in catalog],
+                            [source['DEC'] for source in catalog],
+                            unit=(u.deg,u.deg))
 
     ids = ['MALS J{0}{1}'.format(coord.ra.to_string(unit=u.hourangle,
                                                      sep='',
@@ -126,13 +134,21 @@ def transform_cat(catalog):
                                  coord.dec.to_string(sep='',
                                                       precision=0,
                                                       alwayssign=True,
-                                                      pad=True)) for coord in coordinates]
+                                                      pad=True)) for coord in source_coord]
 
-    c = Column(ids, name='MALS_id')
-    catalog.add_column(c, index=0)
-
+    dra, ddec = pointing_center.spherical_offsets_to(source_coord)
+    
+    # Remove unnecessary columns
     catalog.remove_column('Source_id')
     catalog.remove_column('Isl_id')
+
+    # Add columns at appropriate indices
+    col_a = Column(pointing_name, 'Pointing_id')
+    col_b = Column(ids, name='MALS_id')
+    col_c = Column(dra, name='dRA')
+    col_d = Column(ddec, name='dDEC')
+    catalog.add_columns([col_a, col_b, col_c, col_d],
+                         indexes=[0,0,2,4])
 
     return catalog
 
@@ -206,14 +222,18 @@ def main():
     ds9 = args.ds9
     spectral_index = args.spectral_index
 
-    imname = os.path.join(os.path.dirname(inpimage),os.path.basename(inpimage).split('.')[0])
-
     if mode in 'cataloging':
         bdsf_args = 'parsets/bdsf_args_cat.json'
     elif mode in 'masking':
         bdsf_args = 'parsets/bdsf_args_mask.json'
     else:
-        print(f'Invalid mode {mode}, please choose between c(ataloging) or m(atching)')
+        print(f'Invalid mode {mode}, please choose between c(ataloging) or m(asking)')
+
+    output_folder = os.path.join(os.path.dirname(inpimage),
+                                 os.path.basename(inpimage).split('.')[0]+'_sf_output')
+    imname = os.path.join(output_folder, os.path.basename(inpimage).split('.')[0])
+    if not os.path.exists(output_folder):
+        os.mkdir(output_folder)
 
     outcat = run_bdsf(inpimage, argfile=bdsf_args)
     bdsf_cat = Table.read(outcat)
@@ -244,6 +264,11 @@ def main():
     if mode in 'masking':
         bdsf_cat.write(outcat, overwrite=True)
         write_mask(outfile=imname+'_mask.crtf', regions=bdsf_regions, size=size)
+
+    # Make sure the log file is in the output folder
+    logname = os.path.join(os.path.dirname(inpimage),
+                           os.path.basename(inpimage)+'.pybdsf.log')
+    os.system(f'mv {logname} {output_folder}')
 
 def new_argument_parser():
 

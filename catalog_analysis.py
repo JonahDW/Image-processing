@@ -13,6 +13,8 @@ from astropy.coordinates import SkyCoord
 from pathlib import Path
 from argparse import ArgumentParser
 
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from matplotlib.patches import Ellipse
 
