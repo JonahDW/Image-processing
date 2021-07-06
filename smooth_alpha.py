@@ -2,7 +2,13 @@ import sys
 import os
 import shutil
 
-imname = sys.argv[1]
+# Make sure that this works regardless of CASA version
+args = sys.argv
+if len(args) > 2:
+    n = len(args)
+    args = args[n-2:]
+
+imname = args[1]
 
 dirname = os.path.dirname(imname)
 
