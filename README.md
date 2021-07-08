@@ -19,7 +19,7 @@ Choose between outputting a catalog of sources or a mask file of Gaussians. Inpu
 
 ```
 usage: sourcefinding.py [-h] [-s SIZE] [--ds9 [DS9]] [--plot [PLOT]]
-                        [--spectral_index]
+                        [--spectral_index] [--survey SURVEY]
                         mode image
 
 positional arguments:
@@ -40,11 +40,11 @@ optional arguments:
   --plot [PLOT]         Plot the results of the sourcefinding as a png of the
                         image with sources overlaid, optionally provide an
                         output filename (default = do not plot the results).
-  --spectral_index      Measure the spectral indices in the .alpha and
-                        alpha.error images. (assuming they are in the same
-                        directory as the input image) and include them in the
-                        catalog. This requires CASA functionalities (default =
-                        do not measure spectral indices).
+  --spectral_index      Measure the spectral indices of the sources. this
+                        requires the presence of a tt0 and tt1 image in the
+                        same folder (default = do not measure spectral
+                        indices).
+  --survey SURVEY       Name of the survey to be used in source ids.
 ```
 
 ## catalog_matching.py

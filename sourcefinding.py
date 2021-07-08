@@ -159,7 +159,7 @@ def transform_cat(catalog, survey_name):
     catalog.remove_column('Isl_id')
 
     # Add columns at appropriate indices
-    col_a = Column(pointing_name, 'Pointing_id')
+    col_a = Column(pointing_name, name='Pointing_id')
     col_b = Column(ids, name=survey_name+'_id')
     col_c = Column(dra, name='dRA')
     col_d = Column(ddec, name='dDEC')
@@ -317,7 +317,7 @@ def new_argument_parser():
                                 image in the same folder (default = do not measure
                                 spectral indices).""")
     parser.add_argument("--survey", default='MALS',
-                        help="Name of the survey to be used in source ids")
+                        help="Name of the survey to be used in source ids.")
     return parser
 
 if __name__ == '__main__':
