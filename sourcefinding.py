@@ -44,10 +44,11 @@ def run_bdsf(image, argfile):
     with open(path) as f:
         args_dict = json.load(f)
 
-    img = bdsf.process_image(image,
-                            rms_box=(150,15),
-                            rms_box_bright=(50,15),
-                            **args_dict['process_image'])
+    # Fix json stupidness
+    args_dict['process_image']['rms_box'] = ast.literal_eval(args_dict['process_image']['rms_box'])
+    args_dict['process_image']['rms_box_bright'] = ast.literal_eval(args_dict['process_image']['rms_box_bright'])
+
+    img = bdsf.process_image(image, **args_dict['process_image'])
 
     for img_type in args_dict['export_image']:
         if args_dict['export_image'][img_type]:
@@ -74,10 +75,7 @@ def read_alpha(inpimage, catalog, regions):
     tt1 = fits.open(imname+'_tt1.fits')
 
     # Get WCS from header and drop freq and stoke axes
-    wcs = WCS(tt0[0].header)
-    wcs = wcs.dropaxis(3)
-    wcs = wcs.dropaxis(2)
-
+    wcs = WCS(tt0[0].header, naxis=2)
     pixel_regions = [region.to_pixel(wcs) for region in regions]
 
     alpha = tt1[0].data[0,0,:,:]/tt0[0].data[0,0,:,:]
@@ -97,6 +95,7 @@ def read_alpha(inpimage, catalog, regions):
 
     alpha_list = []
     alpha_err_list = []
+    # Measure spectral index for each source
     for i, source in enumerate(catalog):
         pixel_region = pixel_regions[i]
 
@@ -109,6 +108,7 @@ def read_alpha(inpimage, catalog, regions):
         weights = weights[~np.isnan(alpha_values)]
         alpha_values = alpha_values[~np.isnan(alpha_values)]
 
+        # Get weighted mean and standard deviations
         if len (alpha_values) > 0:
             alpha_mean = np.sum(alpha_values*weights)/np.sum(weights)
             alpha_std = np.sqrt(np.sum(weights*(alpha_values-alpha_mean)**2) / 
@@ -153,7 +153,7 @@ def transform_cat(catalog, survey_name):
                                                       pad=True)) for coord in source_coord]
 
     dra, ddec = pointing_center.spherical_offsets_to(source_coord)
-    
+
     # Remove unnecessary columns
     catalog.remove_column('Source_id')
     catalog.remove_column('Isl_id')

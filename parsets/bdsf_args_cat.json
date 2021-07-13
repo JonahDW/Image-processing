@@ -2,8 +2,10 @@
     "process_image" : {
         "thresh_pix" : 5.0,
         "thresh_isl" : 4.0,
+        "rms_box" : "(150,15)",
         "adaptive_rms_box" : true,
         "adaptive_thresh" : 100.0,
+        "rms_box_bright" : "(50,15)",
         "group_tol" : 10.0
     },
     "export_image" : {
