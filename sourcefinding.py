@@ -21,7 +21,7 @@ from astropy.table import Table, Column
 from astropy.coordinates import SkyCoord
 from scipy import ndimage
 
-from regions import EllipseSkyRegion, write_crtf, write_ds9
+from regions import EllipseSkyRegion, Regions
 
 import bdsf
 import casacore.images as pim
@@ -109,7 +109,7 @@ def read_alpha(inpimage, catalog, regions):
         alpha_values = alpha_values[~np.isnan(alpha_values)]
 
         # Get weighted mean and standard deviations
-        if len (alpha_values) > 0:
+        if len(alpha_values) > 0.5*np.sum(mask_data):
             alpha_mean = np.sum(alpha_values*weights)/np.sum(weights)
             alpha_std = np.sqrt(np.sum(weights*(alpha_values-alpha_mean)**2) / 
                                (np.sum(weights)*(len(weights)-1 / len(weights))))
@@ -176,10 +176,10 @@ def catalog_to_regions(catalog, ra='RA', dec='DEC', majax='Maj', minax='Min', PA
     catalog -- Input catalog
     ra, dec, majax, minax, PA -- Column names of containing required variables
     '''
-    regions = [
+    regions = Regions([
         EllipseSkyRegion(center=SkyCoord(source[ra], source[dec], unit='deg'),
                          height=2*source[majax]*u.deg, width=2*source[minax]*u.deg,
-                         angle=source[PA]*u.deg) for source in catalog]
+                         angle=source[PA]*u.deg) for source in catalog])
     return regions
 
 def write_mask(outfile, regions, size=1.0):
@@ -197,7 +197,7 @@ def write_mask(outfile, regions, size=1.0):
             region.width *= size
 
     print(f'Wrote mask file to {outfile}')
-    write_crtf(regions, outfile)
+    regions.write(outfile, format='crtf')
 
 def plot_sf_results(image_file, rms_image, regions, plot):
     '''
@@ -266,10 +266,10 @@ def main():
         if ds9 is True:
             pass
         else:
-            bdsf_regions = [bdsf_regions[i] for i in np.argpartition(-bdsf_cat['Peak_flux'], int(ds9))[:5]]
+            bdsf_regions = Regions([bdsf_regions[i] for i in np.argpartition(-bdsf_cat['Peak_flux'], int(ds9))[:5]])
         outfile = imname+'.reg'
         print(f'Wrote ds9 region file to {outfile}')
-        write_ds9(bdsf_regions, outfile)
+        bdsf_regions.write(outfile, format='ds9')
 
     # Determine output by mode
     if mode in 'cataloging':
