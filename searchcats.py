@@ -275,6 +275,9 @@ def getnvssdata(ra,dec,offset):
                          nvssfittable,
                          keys=['RA','DEC','Distance','Field','YPix','XPix'],
                          table_names=['DC','FIT'])
+        if not nvsstable:
+            print('Mismatch between deconvolved and fitted tables, using only deconvolved')
+            nvsstable = nvssdctable
 
         nvss_coordinates = SkyCoord(ra=nvsstable['RA'],
                                     dec=nvsstable['DEC'],

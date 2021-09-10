@@ -7,7 +7,7 @@ import numpy as np
 
 from astropy import units as u
 from astropy.io import fits
-from astropy.table import Table, join
+from astropy.table import Table, join, vstack
 from astropy.coordinates import SkyCoord
 
 from pathlib import Path
@@ -157,19 +157,30 @@ class Catalog:
 
         plt.scatter(unresolved['Peak_flux'], 
                     unresolved['Total_flux']/unresolved['Peak_flux'], 
-                    color='b', s=5, label='Unresolved')
+                    color='b', s=5, label=f'Unresolved ({len(unresolved)})')
         plt.scatter(resolved['Peak_flux'], 
                     resolved['Total_flux']/resolved['Peak_flux'], 
-                    color='r', s=5, label='Resolved')
+                    color='r', s=5, label=f'Resolved ({len(resolved)})')
         plt.xscale('log')
         plt.yscale('log')
 
         plt.ylabel('$S_{tot}/S_{peak}$')
-        plt.xlabel('$S_{peak} (\\mathrm{Jy}$')
+        plt.xlabel('$S_{peak} (\\mathrm{Jy})$')
         plt.legend()
 
         plt.savefig(os.path.join(self.dirname,self.cat_name+'_resolved.png'), dpi=dpi)
         plt.close()
+
+def combine_catalogs(catalogs, output_cat):
+    cats = []
+    for cat in catalogs:
+        cats.append(Table.read(cat))
+    full_cat = vstack(cats)
+
+    print('Writing full catalog to '+output_cat)
+    full_cat.write(output_cat, format='fits', overwrite=True)
+
+    return output_cat
 
 def main():
 
@@ -178,7 +189,13 @@ def main():
 
     catalog_file = args.catalog
     rms_image = args.rms_image
+    output_cat = args.output_cat
     dpi = args.dpi
+
+    if len(catalog_file) > 1:
+        catalog_file = combine_catalogs(catalog_file, output_cat)
+    else:
+        catalog_file = catalog_file[0]
 
     flux_col = 'Total_flux'
     catalog = Catalog(catalog_file)
@@ -194,11 +211,16 @@ def new_argument_parser():
 
     parser = ArgumentParser()
 
-    parser.add_argument("catalog",
-                        help="""Pointing catalog made by PyBDSF.""")
-    parser.add_argument('-r', '--rms_image', default=None,
-                        help="""Specify input rms image for the calculation
-                                of differential number counts.""")
+    parser.add_argument("catalog", nargs='+',
+                        help="""Pointing catalog(s) made by PyBDSF. If multiple
+                                are specified they are first combined into a
+                                single catalog.""")
+    parser.add_argument('-c', '--comp_corr', default=None,
+                        help="""Specify input pickle file containing completeness
+                                fractions for correcting differential number counts.""")
+    parser.add_argument('-o', '--output_cat', default=None,
+                        help="""In the case of multiple catalogs being combined,
+                                specify the name of the full output catalog""")
     parser.add_argument('-d', '--dpi', default=300,
                         help="""DPI of the output images (default = 300).""")
 

@@ -1,7 +1,7 @@
 {
     "process_image" : {
-        "thresh_pix" : 10.0,
         "thresh_isl" : 7.0,
+        "thresh_pix" : 10.0,
         "rms_box" : "(150,15)",
         "adaptive_rms_box" : true,
         "adaptive_thresh" : 100.0,
@@ -22,8 +22,6 @@
         "island_mask" : false
     },
     "write_catalog" : {
-        "format" : "fits",
-        "catalog_type" : "gaul",
-        "clobber" : true
+	"catalog_type" : "gaul"
     }
 }

@@ -1,19 +1,19 @@
 {
     "process_image" : {
-        "thresh_pix" : 5.0,
         "thresh_isl" : 4.0,
+        "thresh_pix" : 4.5,
+        "group_tol" : 10.0,
         "rms_box" : "(150,15)",
         "adaptive_rms_box" : true,
         "adaptive_thresh" : 100.0,
-        "rms_box_bright" : "(50,15)",
-        "group_tol" : 10.0
+        "rms_box_bright" : "(40,15)"
     },
     "export_image" : {
         "ch0" : true,
         "rms" : true,
-        "mean" : false,
+        "mean" : true,
         "pi" : false,
-        "gaus_resid" : false,
+        "gaus_resid" : true,
         "shap_resid" : false,
         "psf_major" : false,
         "psf_minor" : false,
@@ -21,10 +21,8 @@
         "psf_ratio" : false,
         "psf_ratio_aper" : false,
         "island_mask" : false
-    },
+    }, 
     "write_catalog" : {
-        "format" : "fits",
-        "catalog_type" : "srl",
-        "clobber" : true
+	"catalog_type" : "srl"
     }
 }

@@ -26,7 +26,7 @@ from regions import EllipseSkyRegion, Regions
 import bdsf
 import casacore.images as pim
 
-def run_bdsf(image, argfile):
+def run_bdsf(image, output_dir, argfile, output_format):
     '''
     Run PyBDSF on an image
 
@@ -35,10 +35,7 @@ def run_bdsf(image, argfile):
     argfile -- Input json file containing arguments
                for bdsf functions
     '''
-    imname = os.path.join(os.path.dirname(image),
-                          os.path.basename(image).split('.')[0]+'_sf_output',
-                          os.path.basename(image).split('.')[0])
-    outcatalog = imname+'_bdsfcat.fits'
+    imname = os.path.join(output_dir,os.path.basename(image).split('.')[0])
 
     path = Path(__file__).parent / argfile
     with open(path) as f:
@@ -54,9 +51,36 @@ def run_bdsf(image, argfile):
         if args_dict['export_image'][img_type]:
             img.export_image(outfile=imname+'_'+img_type+'.fits', clobber=True, img_type=img_type)
 
-    img.write_catalog(outfile = outcatalog, **args_dict['write_catalog'])
+    outcat = None
+    for fmt in output_format:
+        if fmt == 'ds9':
+            outcatalog = imname+'_bdsfcat.ds9.reg'
+            img.write_catalog(outfile=outcatalog,
+                              format=fmt,
+                              catalog_type='gaul',
+                              clobber=True)
+        elif fmt == 'kvis':
+            outcatalog = imname+'_bdsfcat.kvis.ann'
+            img.write_catalog(outfile=outcatalog,
+                              format=fmt,
+                              catalog_type='gaul',
+                              clobber=True)
+        elif fmt == 'star':
+            outcatalog = imname+'_bdsfcat.star'
+            img.write_catalog(outfile=outcatalog,
+                              format=fmt,
+                              catalog_type='gaul',
+                              clobber=True)
+        else:
+            outcatalog = imname+'_bdsfcat.'+fmt
+            img.write_catalog(outfile=outcatalog,
+                              format=fmt,
+                              catalog_type=args_dict['write_catalog']['catalog_type'],
+                              clobber=True)
+            if fmt == 'fits':
+                outcat = outcatalog
 
-    return outcatalog
+    return outcat
 
 def read_alpha(inpimage, catalog, regions):
     '''
@@ -105,13 +129,14 @@ def read_alpha(inpimage, catalog, regions):
         alpha_values = alpha[mask_data]
         weights = tt0[0].data[0,0,:,:][mask_data]
 
+        alpha_values = alpha_values.filled(np.nan)
         weights = weights[~np.isnan(alpha_values)]
         alpha_values = alpha_values[~np.isnan(alpha_values)]
 
         # Get weighted mean and standard deviations
         if len(alpha_values) > 0.5*np.sum(mask_data):
-            alpha_mean = np.sum(alpha_values*weights)/np.sum(weights)
-            alpha_std = np.sqrt(np.sum(weights*(alpha_values-alpha_mean)**2) / 
+            alpha_mean = np.nansum(alpha_values*weights)/np.sum(weights)
+            alpha_std = np.sqrt(np.nansum(weights*(alpha_values-alpha_mean)**2) / 
                                (np.sum(weights)*(len(weights)-1 / len(weights))))
             alpha_list.append(alpha_mean)
             alpha_err_list.append(alpha_std)
@@ -143,7 +168,12 @@ def transform_cat(catalog, survey_name):
                             [source['DEC'] for source in catalog],
                             unit=(u.deg,u.deg))
 
-    ids = [survey_name+' J{0}{1}'.format(coord.ra.to_string(unit=u.hourangle,
+    if survey_name:
+        survey_name = survey_name.ljust(1)
+    else:
+        survey_name = ''
+
+    ids = [survey_name+'J{0}{1}'.format(coord.ra.to_string(unit=u.hourangle,
                                                      sep='',
                                                      precision=0,
                                                      pad=True),
@@ -154,15 +184,11 @@ def transform_cat(catalog, survey_name):
 
     dra, ddec = pointing_center.spherical_offsets_to(source_coord)
 
-    # Remove unnecessary columns
-    catalog.remove_column('Source_id')
-    catalog.remove_column('Isl_id')
-
     # Add columns at appropriate indices
     col_a = Column(pointing_name, name='Pointing_id')
     col_b = Column(ids, name=survey_name+'_id')
-    col_c = Column(dra, name='dRA')
-    col_d = Column(ddec, name='dDEC')
+    col_c = Column(dra, name='dRA_PC')
+    col_d = Column(ddec, name='dDEC_PC')
     catalog.add_columns([col_a, col_b, col_c, col_d],
                          indexes=[0,0,2,4])
 
@@ -235,7 +261,7 @@ def main():
     mode = args.mode
     size = args.size
     plot = args.plot
-    ds9 = args.ds9
+    output_format = args.output_format
     spectral_index = args.spectral_index
     survey = args.survey
 
@@ -245,15 +271,24 @@ def main():
         bdsf_args = 'parsets/bdsf_args_mask.json'
     else:
         print(f'Invalid mode {mode}, please choose between c(ataloging) or m(asking)')
+        sys.exit()
 
-    output_folder = os.path.join(os.path.dirname(inpimage),
-                                 os.path.basename(inpimage).split('.')[0]+'_sf_output')
-    imname = os.path.join(output_folder, os.path.basename(inpimage).split('.')[0])
-    if not os.path.exists(output_folder):
-        os.mkdir(output_folder)
+    output_dir = os.path.join(os.path.dirname(inpimage),
+                              os.path.basename(inpimage).split('.')[0]+'_pybdsf')
+    imname = os.path.join(output_dir, os.path.basename(inpimage).split('.')[0])
+    if not os.path.exists(output_dir):
+        os.mkdir(output_dir)
 
-    outcat = run_bdsf(inpimage, argfile=bdsf_args)
-    bdsf_cat = Table.read(outcat)
+    if output_format is None:
+        output_format = ['fits']
+
+    outcat = run_bdsf(inpimage, output_dir, argfile=bdsf_args, output_format=output_format)
+
+    if not outcat:
+        print('No fits output files generated, no further operations are performed')
+        sys.exit()
+
+    bdsf_cats = Table.read(outcat)
     bdsf_regions = catalog_to_regions(bdsf_cat)
 
     if plot:
@@ -262,30 +297,21 @@ def main():
     if spectral_index:
         bdsf_cat = read_alpha(inpimage, bdsf_cat, bdsf_regions)
 
-    if ds9:
-        if ds9 is True:
-            pass
-        else:
-            bdsf_regions = Regions([bdsf_regions[i] for i in np.argpartition(-bdsf_cat['Peak_flux'], int(ds9))[:5]])
-        outfile = imname+'.reg'
-        print(f'Wrote ds9 region file to {outfile}')
-        bdsf_regions.write(outfile, format='ds9')
-
     # Determine output by mode
     if mode in 'cataloging':
-        outfile = imname+'_catalog.fits'
+        outfile = outcat.replace('bdsfcat','catalog')
         bdsf_cat = transform_cat(bdsf_cat, survey)
         print(f'Wrote catalog to {outfile}')
         bdsf_cat.write(outfile, overwrite=True)
+        os.system('rm '+outcat)
 
     if mode in 'masking':
-        bdsf_cat.write(outcat, overwrite=True)
+        bdsf_cat.write(outcats[i], overwrite=True)
         write_mask(outfile=imname+'_mask.crtf', regions=bdsf_regions, size=size)
 
     # Make sure the log file is in the output folder
-    logname = os.path.join(os.path.dirname(inpimage),
-                           os.path.basename(inpimage)+'.pybdsf.log')
-    os.system(f'mv {logname} {output_folder}')
+    logname = inpimage+'.pybdsf.log'
+    os.system(f'mv {logname} {output_dir}')
 
 def new_argument_parser():
 
@@ -298,14 +324,16 @@ def new_argument_parser():
                                 output files.""")
     parser.add_argument("image",
                         help="""Name of the image to perform sourcefinding on.""")
+    parser.add_argument("-o", "--output_format", nargs='+', default=None,
+                        help="""Output format of the catalog, supported formats
+                                are: ds9, fits, star, kvis, ascii, csv. Only
+                                fits format includes all available information
+                                and can be used for further processing. 
+                                Input can be multiple entries, 
+                                e.g. -o fits ds9 (default = fits).""")
     parser.add_argument("-s", "--size", default=1.0,
                         help="""If masking, multiply the size of the masks by this
                                 amount (default = 1.0).""")
-    parser.add_argument("--ds9", nargs="?", const=True,
-                        help="""Write the sources found to a ds9 region file,
-                                optionally give a number n, only the n brightest
-                                sources will be included in the file
-                                (default = do not create a region file).""")
     parser.add_argument("--plot", nargs="?", const=True,
                         help="""Plot the results of the sourcefinding as a png
                                 of the image with sources overlaid, optionally
@@ -316,7 +344,7 @@ def new_argument_parser():
                                 this requires the presence of a tt0 and tt1
                                 image in the same folder (default = do not measure
                                 spectral indices).""")
-    parser.add_argument("--survey", default='MALS',
+    parser.add_argument("--survey", default=None,
                         help="Name of the survey to be used in source ids.")
     return parser
 
