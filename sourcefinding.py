@@ -186,11 +186,11 @@ def transform_cat(catalog, survey_name):
 
     # Add columns at appropriate indices
     col_a = Column(pointing_name, name='Pointing_id')
-    col_b = Column(ids, name=survey_name+'_id')
+    col_b = Column(ids, name='Source_name')
     col_c = Column(dra, name='dRA_PC')
     col_d = Column(ddec, name='dDEC_PC')
     catalog.add_columns([col_a, col_b, col_c, col_d],
-                         indexes=[0,0,2,4])
+                         indexes=[0,0,4,6])
 
     return catalog
 
@@ -285,10 +285,10 @@ def main():
     outcat = run_bdsf(inpimage, output_dir, argfile=bdsf_args, output_format=output_format)
 
     if not outcat:
-        print('No fits output files generated, no further operations are performed')
+        print('No FITS catalog generated, no further operations are performed')
         sys.exit()
 
-    bdsf_cats = Table.read(outcat)
+    bdsf_cat = Table.read(outcat)
     bdsf_regions = catalog_to_regions(bdsf_cat)
 
     if plot:
