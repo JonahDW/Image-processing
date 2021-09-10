@@ -75,8 +75,7 @@ def run_bdsf(image, output_dir, argfile, output_format):
             outcatalog = imname+'_bdsfcat.'+fmt
             img.write_catalog(outfile=outcatalog,
                               format=fmt,
-                              catalog_type=args_dict['write_catalog']['catalog_type'],
-                              clobber=True)
+                              **args_dict['write_catalog'])
             if fmt == 'fits':
                 outcat = outcatalog
 

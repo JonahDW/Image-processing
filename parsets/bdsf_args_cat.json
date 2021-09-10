@@ -1,7 +1,7 @@
 {
     "process_image" : {
         "thresh_isl" : 4.0,
-        "thresh_pix" : 4.5,
+        "thresh_pix" : 5.0,
         "group_tol" : 10.0,
         "rms_box" : "(150,15)",
         "adaptive_rms_box" : true,
@@ -23,6 +23,7 @@
         "island_mask" : false
     }, 
     "write_catalog" : {
-	"catalog_type" : "srl"
+	"catalog_type" : "srl",
+	"clobber" : true
     }
 }
