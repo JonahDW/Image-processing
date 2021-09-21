@@ -1,6 +1,18 @@
 from pathlib import Path
 import numpy as np
+import pickle
 import json
+
+def pickle_to_file(data, fname):
+    fh = open(fname, 'wb')
+    pickle.dump(data, fh)
+    fh.close()
+
+def pickle_from_file(fname):
+    fh = open(fname, 'rb')
+    data = pickle.load(fh)
+    fh.close()
+    return data
 
 def meerkat_lpb(a, b, freq, offset):
     '''

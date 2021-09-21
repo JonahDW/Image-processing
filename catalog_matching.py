@@ -61,7 +61,7 @@ class SourceEllipse:
                         height = 2*self.Maj,
                         angle = -self.PA)
 
-class ExternalCatalog():
+class ExternalCatalog:
 
     def __init__(self, name, catalog, center):
         self.name = name
@@ -86,7 +86,7 @@ class ExternalCatalog():
             self.BPA = cat_info['properties']['BPA']
             self.freq = cat_info['properties']['freq']
 
-class Pointing():
+class Pointing:
 
     def __init__(self, catalog, filename):
         self.dirname = os.path.dirname(filename)
@@ -95,7 +95,7 @@ class Pointing():
         self.sources = [SourceEllipse(source) for source in catalog]
 
         # Parse meta
-        header = dict([x.split(' = ') for x in catalog.meta['comments'][4:]])
+        header = catalog.meta
 
         self.telescope = header['TELESCOP'].replace("'","")
         self.BMaj = float(header['BMAJ'])*3600 #arcsec
@@ -291,10 +291,30 @@ def plot_astrometrics(pointing, ext, matches, astro, dpi):
         plt.savefig(astro, dpi=dpi)
     plt.close()
 
-def plot_fluxes(pointing, ext, matches, fluxtype, flux, dpi):
+def plot_fluxes(pointing, ext, matches, fluxtype, flux, alpha, dpi):
     '''
     Plot flux offsets of sources to the reference catalog
     '''
+    def flux_correction(center_dist, alpha):
+        # Correct flux modified beam pattern induced by spectral shape
+        freq = np.linspace(0.88,1.68,100)
+        flux = freq**(-alpha)
+
+        ref_beam = helpers.meerkat_lpb(0.985, 1.189, freq, 0)
+        ref_flux = np.trapz(flux*ref_beam, freq)
+
+        total_flux = []
+        attenuation = []
+        for offset in center_dist:
+            beam = helpers.meerkat_lpb(0.985, 1.189, freq, offset)
+            total_flux.append(np.trapz(flux*beam, freq)/ref_flux)
+
+            beam_cen = helpers.meerkat_lpb(0.985, 1.189, pointing.freq/1e3, offset)
+            attenuation.append(beam_cen)
+
+        correction = np.array(total_flux)/np.array(attenuation)
+        return correction
+
     ext_flux = []
     int_flux = []
     RA_off = []
@@ -319,14 +339,14 @@ def plot_fluxes(pointing, ext, matches, fluxtype, flux, dpi):
 
     # Get proper angular offset
     RA_off = (np.array(RA_off) + 180.) % 360. - 180.
-
-    # Scale flux density to proper frequency
-    ext_flux_corrected = np.array(ext_flux) * (pointing.freq/ext.freq)**-0.7
-    dFlux = np.array(int_flux)/np.array(ext_flux)
     center_dist = np.sqrt(np.array(RA_off)**2 + np.array(DEC_off)**2)
 
-    fig, ax = plt.subplots()
+    # Scale flux density to proper frequency
+    flux_correction = flux_correction(center_dist, alpha)
+    ext_flux_corrected = np.array(ext_flux) * (pointing.freq/ext.freq)**-alpha
+    dFlux = np.array(int_flux)/ext_flux_corrected/flux_correction
 
+    fig, ax = plt.subplots()
     ax.scatter(center_dist, dFlux, color='k', marker='.', s=5)
 
     ax.set_title(f'Flux ratio of {len(dFlux)} sources')
@@ -371,7 +391,8 @@ def main():
 
     astro = args.astro
     flux = args.flux
-    plot= args.plot
+    plot = args.plot
+    alpha = args.alpha
     output = args.output
 
     pointing_cat = Table.read(pointing)
@@ -408,7 +429,7 @@ def main():
     if astro:
         plot_astrometrics(pointing, ext_catalog, matches, astro, dpi)
     if flux:
-        plot_fluxes(pointing, ext_catalog, matches, fluxtype, flux, dpi)
+        plot_fluxes(pointing, ext_catalog, matches, fluxtype, flux, alpha, dpi)
     if output:
         write_to_catalog(pointing, ext_catalog, matches, output)
 
@@ -442,10 +463,10 @@ def new_argument_parser():
     parser.add_argument("--fluxtype", default="Total",
                         help="""Whether to use Total or Peak flux for determining
                                 the flux ratio (default = Total).""")
-    parser.add_argument("--alpha", default=0.7,
+    parser.add_argument("--alpha", default=0.8,
                         help="""The spectral slope to assume for calculating the
                                 flux ratio, where Flux_1 = Flux_2 * (freq_1/freq_2)^-alpha
-                                (default = 0.7)""")
+                                (default = 0.8)""")
     parser.add_argument("--output", nargs="?", const=True,
                         help="""Output the result of the matching into a catalog,
                                 optionally provide an output filename

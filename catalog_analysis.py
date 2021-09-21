@@ -7,7 +7,7 @@ import numpy as np
 
 from astropy import units as u
 from astropy.io import fits
-from astropy.table import Table, join, vstack
+from astropy.table import Table, vstack
 from astropy.coordinates import SkyCoord
 
 from pathlib import Path
@@ -19,15 +19,14 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Ellipse
 
 from scipy.optimize import curve_fit
-from scipy.interpolate import UnivariateSpline
+from scipy.interpolate import UnivariateSpline, interp1d
 
-#plt.rc('font', **{'family': 'serif', 'serif': ['Computer Modern']})
+import helpers
+
+plt.rc('font', **{'family': 'serif', 'serif': ['Computer Modern']})
 plt.rc('text', usetex=True)
 
 plt.rcParams.update({'font.size': 14})
-
-def power_law(x, k, gamma):
-    return k*x**(-gamma)
 
 class Catalog:
 
@@ -37,6 +36,17 @@ class Catalog:
         print(f'Reading in catalog: {self.cat_name}')
 
         self.table = Table.read(catalog_file)
+
+        # Parse meta
+        header = self.table.meta
+        if len(header['OBJECT'].split(',')) > 1:
+            self.obj_name = header['OBJECT'].split(',')
+        else:
+            self.obj_name = header['OBJECT'].replace("'","")
+        self.pix_area = np.pi*np.array(header['AXIS1'].split(','), dtype=float)*np.array(header['AXIS2'].split(','), dtype=float)/4
+        self.pix_size = float(max(header['CDELT1'],header['CDELT2']))
+        self.bmaj = np.array(header['BMAJ'].split(','), dtype=float)
+        self.bmin = np.array(header['BMIN'].split(','), dtype=float)
 
         self.dN = None
         self.edges = None
@@ -68,10 +78,6 @@ class Catalog:
         fit_edges = self.edges[cutoff_high:]
         fit_dN = self.dN[cutoff_high:]
 
-        popt, pcov = curve_fit(power_law, fit_edges[:-1], fit_dN, p0=[1,1])
-        print(f'Fit power law to number counts with value alpha={popt[1]:.2f}')
-
-        plt.plot(self.edges, power_law(self.edges, *popt), color='k', ls='--', label=f'Power law $\\alpha={popt[1]:.2f}$')
         plt.bar(self.edges[:-1], self.dN, width=np.diff(self.edges), edgecolor='k', alpha=0.5, align='edge')
         plt.xscale('log')
         plt.yscale('log')
@@ -79,12 +85,11 @@ class Catalog:
 
         plt.ylabel('$N$')
         plt.xlabel('$S (\\mathrm{Jy})$')
-        plt.legend()
 
         plt.savefig(os.path.join(self.dirname,self.cat_name+'_number_counts.png'), dpi=dpi)
         plt.close()
 
-    def plot_diff_number_counts(self, rms_image, flux_col, dpi):
+    def plot_diff_number_counts(self, flux_col, dpi, rms_image=None, completeness=None):
         '''
         Compute and plot differential number counts
         input RMS image is used to account for sky coverage
@@ -94,30 +99,50 @@ class Catalog:
         flux_col -- Which table column to use for flux, should be the same
                     as the one used to define the bins
         '''
-        image = fits.open(rms_image)[0]
-        rms_data = image.data.flatten()
-
-        # Convert rms to Jy/pixel
-        bmaj = float(image.header['BMAJ'])
-        bmin = float(image.header['BMIN'])
-        pix_size = abs(image.header['CDELT1'])
-
-        beam = np.pi*bmaj*bmin/(4*np.log(2))
-        pix_per_beam = beam/pix_size**2
-        #rms_data = rms_data/pix_per_beam
-
-        rms_range = np.logspace(np.log10(np.nanmin(rms_data)), np.log10(np.nanmax(rms_data)), 100)
-        coverage = [np.sum([rms_data < rms]) for rms in rms_range]
-
-        # Define a splin and interpolate the values
-        data_spline = UnivariateSpline(rms_range, coverage, s=0, k=3, ext=3)
         bin_means = [np.mean(self.table[flux_col][np.logical_and(self.table[flux_col] > self.edges[i],
-                                                        self.table[flux_col] < self.edges[i+1])]) for i in range(len(self.edges)-1)]
-        interp_bins = data_spline(np.array(bin_means)/5.0)
+                             self.table[flux_col] < self.edges[i+1])]) for i in range(len(self.edges)-1)]
+
+        if rms_image:
+            image = fits.open(rms_image)[0]
+            rms_data = image.data.flatten()
+
+            rms_range = np.logspace(np.log10(np.nanmin(rms_data)), np.log10(np.nanmax(rms_data)), 100)
+            coverage = [np.sum([rms_data < rms])/len(rms_data) for rms in rms_range]
+
+            # Define a splin and interpolate the values
+            data_spline = UnivariateSpline(rms_range, coverage, s=0, k=3, ext=3)
+            interp_bins = data_spline(np.array(bin_means)/4.5)
+
+            angular_size = interp_bins*self.pix_size**2/3283
+
+            # Plot rms coverage
+            plt.plot(rms_range, coverage, linewidth=2, color='k')
+            plt.fill_between(rms_range, 0, coverage, color='k', alpha=0.2)
+
+            plt.xscale('log')
+            plt.autoscale(enable=True, axis='x', tight=True)
+            plt.xlabel('$\\sigma$ (Jy/beam)')
+            plt.ylabel('Coverage')
+
+            plt.savefig(os.path.join(self.dirname, self.cat_name+'_rms_coverage.png'), dpi=300)
+            plt.close()
+
+        if completeness:
+            # Get data from specified file
+            data = helpers.pickle_from_file(completeness)
+            flux_means = np.array([(data[0][i]+data[0][i+1])/2 for i in range(len(data[0])-1)])
+
+            comp_frac = interp1d(flux_means, data[1], fill_value='extrapolate')
+
+            self.dN = self.dN/comp_frac(bin_means)
+            angular_size = self.pix_area*self.pix_size**2/3283
 
         dS = np.diff(self.edges)
         S = np.array(bin_means)
-        angular_size = interp_bins*pix_size**2/3283
+
+        # Save diff number counts to pickle file
+        data = S, dS, self.dN, angular_size
+        helpers.pickle_to_file(data, os.path.join(self.dirname, self.cat_name+'_diff_counts.pkl'))
 
         plt.errorbar(S, S**(5/2)*self.dN/dS/angular_size,
                      yerr=S**(5/2)*np.sqrt(self.dN)/dS/angular_size,
@@ -125,8 +150,7 @@ class Catalog:
 
         # Get differential number counts from SKADS and plot
         path = Path(__file__).parent / 'parsets/intflux_SKADS.pkl'
-        with open(path, 'rb') as f:
-            intflux = pickle.load(f)
+        intflux = helpers.pickle_from_file(path)
         SKADS_total_flux = 10**intflux
 
         SKADS_dN, SKADS_edges = np.histogram(SKADS_total_flux, bins=self.edges)
@@ -147,80 +171,104 @@ class Catalog:
 
     def plot_resolved_fraction(self, dpi):
         '''
-        Plot ratio of peak flux to integrated flux
+        Plot fraction of resolved sources
         '''
-        sigma = np.sqrt(self.table['E_Peak_flux']**2 + self.table['E_Total_flux']**2)
-        resolved_idx = self.table['Total_flux'] > self.table['Peak_flux'] + 3*sigma
+        def isresolved(catalog, bmaj, bmin):
+            # Check if this source is resolved (>2.33sigma beam; 98% confidence)
+            sizeerror = size_error_condon(catalog, bmaj, bmin)
+            majcompare = bmaj+(2.33*sizeerror[0])
+            mincompare = bmin+(2.33*sizeerror[1])
 
-        resolved = self.table[resolved_idx]
-        unresolved = self.table[~resolved_idx]
+            resolved_idx = catalog['Maj'] > majcompare
+            return resolved_idx
 
-        plt.scatter(unresolved['Peak_flux'], 
-                    unresolved['Total_flux']/unresolved['Peak_flux'], 
-                    color='b', s=5, label=f'Unresolved ({len(unresolved)})')
-        plt.scatter(resolved['Peak_flux'], 
-                    resolved['Total_flux']/resolved['Peak_flux'], 
-                    color='r', s=5, label=f'Resolved ({len(resolved)})')
+        def size_error_condon(catalog, beam_maj, beam_min):
+            # Implement errors for elliptical gaussians in the presence of correlated noise
+            # as per Condon (1998), MNRAS.
+            ncorr = beam_maj*beam_min
+
+            rho_maj = ((catalog['Maj']*catalog['Min'])/(4*ncorr)
+                       *(1 + (ncorr/catalog['Maj'])**2)**2.5
+                       *(1 + (ncorr/catalog['Min'])**2)**0.5
+                       *(catalog['Peak_flux']/catalog['Isl_rms'])**2)
+            rho_min = ((catalog['Maj']*catalog['Min'])/(4*ncorr)
+                       *(1 + (ncorr/catalog['Maj'])**2)**0.5
+                       *(1 + (ncorr/catalog['Min'])**2)**2.5
+                       *(catalog['Peak_flux']/catalog['Isl_rms'])**2)
+            majerr = np.sqrt(2*(catalog['Maj']/rho_maj)**2 + (0.02*beam_maj)**2)
+            minerr = np.sqrt(2*(catalog['Min']/rho_min)**2 + (0.02*beam_min)**2)
+
+            return majerr, minerr
+
+        if isinstance(self.obj_name, list):
+            resolved = Table()
+            unresolved = Table()
+            for i, name in enumerate(self.obj_name):
+                table_in = self.table[self.table['Pointing_id'] == 'PT-'+name.replace("'","")]
+                resolved_idx = isresolved(table_in, self.bmaj[i], self.bmin[i])
+
+                resolved = vstack([resolved,table_in[resolved_idx]])
+                unresolved = vstack([unresolved,table_in[~resolved_idx]])
+        else:
+            resolved_idx = isresolved(self.table, self.bmaj, self.bmin)
+
+            resolved = self.table[resolved_idx]
+            unresolved = self.table[~resolved_idx]
+
+        plt.scatter(unresolved['Peak_flux']/unresolved['Isl_rms'],
+                    unresolved['Total_flux']/unresolved['Peak_flux'],
+                    color='b', s=5, label=f'Unresolved ({len(unresolved)})',
+                    alpha=0.1)
+        plt.scatter(resolved['Peak_flux']/resolved['Isl_rms'],
+                    resolved['Total_flux']/resolved['Peak_flux'],
+                    color='r', s=5, label=f'Resolved ({len(resolved)})',
+                    alpha=0.1)
         plt.xscale('log')
         plt.yscale('log')
 
         plt.ylabel('$S_{tot}/S_{peak}$')
-        plt.xlabel('$S_{peak} (\\mathrm{Jy})$')
+        plt.xlabel('S/N')
         plt.legend()
 
         plt.savefig(os.path.join(self.dirname,self.cat_name+'_resolved.png'), dpi=dpi)
         plt.close()
 
-def combine_catalogs(catalogs, output_cat):
-    cats = []
-    for cat in catalogs:
-        cats.append(Table.read(cat))
-    full_cat = vstack(cats)
-
-    print('Writing full catalog to '+output_cat)
-    full_cat.write(output_cat, format='fits', overwrite=True)
-
-    return output_cat
+        return resolved_idx
 
 def main():
-
     parser = new_argument_parser()
     args = parser.parse_args()
 
     catalog_file = args.catalog
     rms_image = args.rms_image
-    output_cat = args.output_cat
+    comp_corr = args.comp_corr
     dpi = args.dpi
-
-    if len(catalog_file) > 1:
-        catalog_file = combine_catalogs(catalog_file, output_cat)
-    else:
-        catalog_file = catalog_file[0]
 
     flux_col = 'Total_flux'
     catalog = Catalog(catalog_file)
     catalog.get_flux_bins(flux_col, nbins=50)
 
     catalog.plot_number_counts(dpi)
-    catalog.plot_resolved_fraction(dpi)
+    resolved = catalog.plot_resolved_fraction(dpi)
 
-    if rms_image:
-        catalog.plot_diff_number_counts(rms_image, flux_col, dpi)
+    if rms_image or comp_corr:
+        catalog.plot_diff_number_counts(flux_col, dpi, rms_image, comp_corr)
 
 def new_argument_parser():
 
     parser = ArgumentParser()
 
-    parser.add_argument("catalog", nargs='+',
-                        help="""Pointing catalog(s) made by PyBDSF. If multiple
-                                are specified they are first combined into a
-                                single catalog.""")
+    parser.add_argument("catalog",
+                        help="""Pointing catalog(s) made by PyBDSF.""")
+    parser.add_argument('-r', '--rms_image', default=None,
+                        help="""Specify input rms image for creating an rms coverage
+                                plot. In the absence of a completeness correction file,
+                                will also be used to correct for completeness.""")
     parser.add_argument('-c', '--comp_corr', default=None,
                         help="""Specify input pickle file containing completeness
-                                fractions for correcting differential number counts.""")
-    parser.add_argument('-o', '--output_cat', default=None,
-                        help="""In the case of multiple catalogs being combined,
-                                specify the name of the full output catalog""")
+                                fractions for correcting differential number counts.
+                                the file is assumed to contain at least the arrays of 
+                                flux bins, completeness fraction.""")
     parser.add_argument('-d', '--dpi', default=300,
                         help="""DPI of the output images (default = 300).""")
 

@@ -153,11 +153,18 @@ def read_alpha(inpimage, catalog, regions):
 
     return catalog
 
-def transform_cat(catalog, survey_name):
+def transform_cat(catalog, survey_name, argfile):
     '''
     Add names for sources in the catalog following IAU naming conventions
     '''
     header = dict([x.split(' = ') for x in catalog.meta['comments'][4:]])
+
+    # Remove sources that are below pixel threshold
+    path = Path(__file__).parent / argfile
+    with open(path) as f:
+        args_dict = json.load(f)
+    thresh = args_dict['process_image']['thresh_pix']
+    catalog = catalog[catalog['Peak_flux']/catalog['Isl_rms'] > thresh]
 
     pointing_center = SkyCoord(float(header['OBSRA'])*u.degree,
                                float(header['OBSDEC'])*u.degree)
@@ -168,7 +175,7 @@ def transform_cat(catalog, survey_name):
                             unit=(u.deg,u.deg))
 
     if survey_name:
-        survey_name = survey_name.ljust(1)
+        survey_name = survey_name.ljust(len(survey_name)+1)
     else:
         survey_name = ''
 
@@ -190,6 +197,22 @@ def transform_cat(catalog, survey_name):
     col_d = Column(ddec, name='dDEC_PC')
     catalog.add_columns([col_a, col_b, col_c, col_d],
                          indexes=[0,0,4,6])
+
+    # Update catalog meta
+    catalog.meta['comments'] = catalog.meta['comments'][:2]
+    catalog.meta.update(header)
+
+    drop_keys = ['PC1_1','PC2_1','PC3_1','PC4_1','PC1_2',
+                 'PC2_2','PC3_2','PC4_2','PC1_3','PC2_3',
+                 'PC3_3','PC4_3','PC1_4','PC2_4','PC3_4','PC4_4']
+    for key in drop_keys:
+        catalog.meta.pop(key)
+
+    # Change NAXIS keywords so that astropy doesn't complain
+    for key in ['NAXIS','NAXIS1','NAXIS2','NAXIS3','NAXIS4']:
+        replacement = {key:key.replace('N','')}
+        for k, v in list(catalog.meta.items()):
+            catalog.meta[replacement.get(k, k)] = catalog.meta.pop(k)
 
     return catalog
 
@@ -299,7 +322,7 @@ def main():
     # Determine output by mode
     if mode in 'cataloging':
         outfile = outcat.replace('bdsfcat','catalog')
-        bdsf_cat = transform_cat(bdsf_cat, survey)
+        bdsf_cat = transform_cat(bdsf_cat, survey, bdsf_args)
         print(f'Wrote catalog to {outfile}')
         bdsf_cat.write(outfile, overwrite=True)
         os.system('rm '+outcat)
