@@ -1,6 +1,6 @@
 {
     "process_image" : {
-        "thresh_isl" : 3.0,
+        "thresh_isl" : 4.0,
         "thresh_pix" : 4.5,
         "group_tol" : 10.0,
         "rms_box" : "(150,15)",

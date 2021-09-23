@@ -107,7 +107,7 @@ class Catalog:
             rms_data = image.data.flatten()
 
             rms_range = np.logspace(np.log10(np.nanmin(rms_data)), np.log10(np.nanmax(rms_data)), 100)
-            coverage = [np.sum([rms_data < rms])/len(rms_data) for rms in rms_range]
+            coverage = [np.sum([rms_data < rms])/np.count_nonzero(~np.isnan(rms_data)) for rms in rms_range]
 
             # Define a splin and interpolate the values
             data_spline = UnivariateSpline(rms_range, coverage, s=0, k=3, ext=3)
@@ -192,8 +192,8 @@ class Catalog:
                        *(1 + (ncorr/catalog['Min'])**2)**0.5
                        *(catalog['Peak_flux']/catalog['Isl_rms'])**2)
             rho_min = ((catalog['Maj']*catalog['Min'])/(4*ncorr)
-                       *(1 + (ncorr/catalog['Maj'])**2)**0.5
-                       *(1 + (ncorr/catalog['Min'])**2)**2.5
+                       *(1 + ncorr/(catalog['Maj'])**2)**0.5
+                       *(1 + ncorr/(catalog['Min'])**2)**2.5
                        *(catalog['Peak_flux']/catalog['Isl_rms'])**2)
             majerr = np.sqrt(2*(catalog['Maj']/rho_maj)**2 + (0.02*beam_maj)**2)
             minerr = np.sqrt(2*(catalog['Min']/rho_min)**2 + (0.02*beam_min)**2)
@@ -228,7 +228,9 @@ class Catalog:
 
         plt.ylabel('$S_{tot}/S_{peak}$')
         plt.xlabel('S/N')
-        plt.legend()
+        leg = plt.legend()
+        for lh in leg.legendHandles: 
+            lh.set_alpha(1)
 
         plt.savefig(os.path.join(self.dirname,self.cat_name+'_resolved.png'), dpi=dpi)
         plt.close()

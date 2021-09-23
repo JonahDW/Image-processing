@@ -15,7 +15,8 @@ Extract this somewhere on a permanent location on your filesystem.
 
 ## sourcefinding.py
 
-Choose between outputting a catalog of sources or a mask file of Gaussians. Input parameters for PyBDSF are located in `bdsf_args_cat.json` and `bdsf_args_mask.json` in the `parsets` folder for cataloging and masking respectively.
+Choose between outputting a catalog of sources or a mask file of Gaussians. Input parameters for PyBDSF are located in `bdsf_args_cat.json` and `bdsf_args_mask.json` in the `parsets` folder for cataloging and masking respectively. Example:
+`python sourcefinding.py catalog myimage.image --plot --survey MALS`
 
 ```
 usage: sourcefinding.py [-h] [-s SIZE] [--ds9 [DS9]] [--plot [PLOT]]
@@ -49,7 +50,8 @@ optional arguments:
 
 ## catalog_matching.py
 
-Match a PyBDSF catalog to an external catalog. Choices are between NVSS, SUMSS and FIRST, or an specified catalog file (mileage may vary for this option). Different types of plots can be made to judge the systematics in the catalog.
+Match a PyBDSF catalog to an external catalog. Choices are between NVSS, SUMSS and FIRST, or an specified catalog file (mileage may vary for this option). Different types of plots can be made to judge the systematics in the catalog. Example:
+`catalog_matching.py myimage_catalog.fits NVSS --astro --flux`
 
 ```
 usage: catalog_matching.py [-h] [-d DPI] [--astro [ASTRO]] [--flux [FLUX]]
@@ -86,7 +88,9 @@ optional arguments:
 
 ## catalog_analysis.py
 
-Analyze a PyBDSF catalog with different metrics regularly applied to radio astronomical data, like source counts and fraction of resolved sources.
+Analyze a PyBDSF catalog with different metrics regularly applied to radio astronomical data, like source counts and fraction of resolved sources. Example:
+`python catalog_analysis.py myimage_catalog.fits -r myimage_rms.fits`
+
 
 ```
 usage: catalog_analysis.py [-h] [-r RMS_IMAGE] [-c COMP_CORR] [-d DPI] catalog

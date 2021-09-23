@@ -101,10 +101,11 @@ class Pointing:
         self.BMaj = float(header['BMAJ'])*3600 #arcsec
         self.BMin = float(header['BMIN'])*3600 #arcsec
         self.BPA = float(header['BPA'])
-        self.freq = float(header['RESTFRQ'])/1e6 #MHz
+        self.freq = float(header['CRVAL3'])/1e6 #MHz
+        self.dfreq = float(header['CDELT3'])/1e6 #MHz
 
-        self.center = SkyCoord(float(header['OBSRA'])*u.degree,
-                               float(header['OBSDEC'])*u.degree)
+        self.center = SkyCoord(float(header['CRVAL1'])*u.degree,
+                               float(header['CRVAL2'])*u.degree)
         dec_fov = abs(float(header['CDELT1']))*float(header['CRPIX1'])*2
         self.fov = dec_fov/np.cos(self.center.dec.rad) * u.degree
 
@@ -195,6 +196,26 @@ def match_catalogs(pointing, ext):
         matches.append(source.match(pointing.cat['RA'], pointing.cat['DEC']))
 
     return matches
+
+def flux_correction(self, alpha):
+    # Correct flux modified beam pattern induced by spectral shape
+    freq = np.linspace(self.freq-self.dfreq,self.freq+self.dfreq,100)/1e3
+    flux = freq**(-alpha)
+
+    ref_beam = helpers.meerkat_lpb(0.985, 1.189, freq, 0)
+    ref_flux = np.trapz(flux*ref_beam, freq)
+
+    total_flux = []
+    attenuation = []
+    for offset in center_dist:
+        beam = helpers.meerkat_lpb(0.985, 1.189, freq, offset)
+        total_flux.append(np.trapz(flux*beam, freq)/ref_flux)
+
+        beam_cen = helpers.meerkat_lpb(0.985, 1.189, self.freq/1e3, offset)
+        attenuation.append(beam_cen)
+
+    correction = np.array(total_flux)/np.array(attenuation)
+    return correction
 
 def plot_catalog_match(pointing, ext, matches, plot, dpi):
     '''
@@ -295,26 +316,6 @@ def plot_fluxes(pointing, ext, matches, fluxtype, flux, alpha, dpi):
     '''
     Plot flux offsets of sources to the reference catalog
     '''
-    def flux_correction(center_dist, alpha):
-        # Correct flux modified beam pattern induced by spectral shape
-        freq = np.linspace(0.88,1.68,100)
-        flux = freq**(-alpha)
-
-        ref_beam = helpers.meerkat_lpb(0.985, 1.189, freq, 0)
-        ref_flux = np.trapz(flux*ref_beam, freq)
-
-        total_flux = []
-        attenuation = []
-        for offset in center_dist:
-            beam = helpers.meerkat_lpb(0.985, 1.189, freq, offset)
-            total_flux.append(np.trapz(flux*beam, freq)/ref_flux)
-
-            beam_cen = helpers.meerkat_lpb(0.985, 1.189, pointing.freq/1e3, offset)
-            attenuation.append(beam_cen)
-
-        correction = np.array(total_flux)/np.array(attenuation)
-        return correction
-
     ext_flux = []
     int_flux = []
     RA_off = []
@@ -342,9 +343,8 @@ def plot_fluxes(pointing, ext, matches, fluxtype, flux, alpha, dpi):
     center_dist = np.sqrt(np.array(RA_off)**2 + np.array(DEC_off)**2)
 
     # Scale flux density to proper frequency
-    flux_correction = flux_correction(center_dist, alpha)
     ext_flux_corrected = np.array(ext_flux) * (pointing.freq/ext.freq)**-alpha
-    dFlux = np.array(int_flux)/ext_flux_corrected/flux_correction
+    dFlux = np.array(int_flux)/ext_flux_corrected
 
     fig, ax = plt.subplots()
     ax.scatter(center_dist, dFlux, color='k', marker='.', s=5)

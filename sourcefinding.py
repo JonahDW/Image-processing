@@ -166,8 +166,8 @@ def transform_cat(catalog, survey_name, argfile):
     thresh = args_dict['process_image']['thresh_pix']
     catalog = catalog[catalog['Peak_flux']/catalog['Isl_rms'] > thresh]
 
-    pointing_center = SkyCoord(float(header['OBSRA'])*u.degree,
-                               float(header['OBSDEC'])*u.degree)
+    pointing_center = SkyCoord(float(header['CRVAL1'])*u.degree,
+                               float(header['CRVAL2'])*u.degree)
     pointing_name = ['PT-'+header['OBJECT'].replace("'","")] * len(catalog)
 
     source_coord = SkyCoord([source['RA'] for source in catalog],
