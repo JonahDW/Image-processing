@@ -53,19 +53,19 @@ def run_bdsf(image, output_dir, argfile, output_format):
 
     outcat = None
     for fmt in output_format:
-        if fmt == 'ds9':
+        if fmt.lower() == 'ds9':
             outcatalog = imname+'_bdsfcat.ds9.reg'
             img.write_catalog(outfile=outcatalog,
                               format=fmt,
                               catalog_type='gaul',
                               clobber=True)
-        elif fmt == 'kvis':
+        elif fmt.lower() == 'kvis':
             outcatalog = imname+'_bdsfcat.kvis.ann'
             img.write_catalog(outfile=outcatalog,
                               format=fmt,
                               catalog_type='gaul',
                               clobber=True)
-        elif fmt == 'star':
+        elif fmt.lower() == 'star':
             outcatalog = imname+'_bdsfcat.star'
             img.write_catalog(outfile=outcatalog,
                               format=fmt,
@@ -76,7 +76,7 @@ def run_bdsf(image, output_dir, argfile, output_format):
             img.write_catalog(outfile=outcatalog,
                               format=fmt,
                               **args_dict['write_catalog'])
-            if fmt == 'fits':
+            if fmt.lower() == 'fits':
                 outcat = outcatalog
 
     return outcat
@@ -281,9 +281,9 @@ def main():
     spectral_index = args.spectral_index
     survey = args.survey
 
-    if mode in 'cataloging':
+    if mode.lower() in 'cataloging':
         bdsf_args = 'parsets/bdsf_args_cat.json'
-    elif mode in 'masking':
+    elif mode.lower() in 'masking':
         bdsf_args = 'parsets/bdsf_args_mask.json'
     else:
         print(f'Invalid mode {mode}, please choose between c(ataloging) or m(asking)')
@@ -314,14 +314,14 @@ def main():
         bdsf_cat = read_alpha(inpimage, bdsf_cat, bdsf_regions)
 
     # Determine output by mode
-    if mode in 'cataloging':
+    if mode.lower() in 'cataloging':
         outfile = outcat.replace('bdsfcat','catalog')
         bdsf_cat = transform_cat(bdsf_cat, survey, bdsf_args)
         print(f'Wrote catalog to {outfile}')
         bdsf_cat.write(outfile, overwrite=True)
         os.system('rm '+outcat)
 
-    if mode in 'masking':
+    if mode.lower() in 'masking':
         bdsf_cat.write(outcats[i], overwrite=True)
         write_mask(outfile=imname+'_mask.crtf', regions=bdsf_regions, size=size)
 

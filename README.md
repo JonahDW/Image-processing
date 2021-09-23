@@ -15,12 +15,13 @@ Extract this somewhere on a permanent location on your filesystem.
 
 ## sourcefinding.py
 
-Choose between outputting a catalog of sources or a mask file of Gaussians. Input parameters for PyBDSF are located in `bdsf_args_cat.json` and `bdsf_args_mask.json` in the `parsets` folder for cataloging and masking respectively. Example:
-`python sourcefinding.py catalog myimage.image --plot --survey MALS`
+Choose between outputting a catalog of sources or a mask file of Gaussians. Input parameters for PyBDSF are located in `bdsf_args_cat.json` and `bdsf_args_mask.json` in the `parsets` folder for cataloging and masking respectively. For example
+```python sourcefinding.py catalog myimage.image -o fits kvis --plot --survey MALS```
+Will perform sourcefinding on the image `myimage.image` and produce both a fits catalog and kvis annotation file. A plot will be produced showing the image and the sources as ellipses overlaid. All sources in the catalog will be given according to IAU conventions with the survey name prepended.
 
 ```
-usage: sourcefinding.py [-h] [-s SIZE] [--ds9 [DS9]] [--plot [PLOT]]
-                        [--spectral_index] [--survey SURVEY]
+usage: sourcefinding.py [-h] [-o OUTPUT_FORMAT [OUTPUT_FORMAT ...]] [-s SIZE]
+                        [--plot [PLOT]] [--spectral_index] [--survey SURVEY]
                         mode image
 
 positional arguments:
@@ -32,12 +33,14 @@ positional arguments:
 
 optional arguments:
   -h, --help            show this help message and exit
+  -o OUTPUT_FORMAT [OUTPUT_FORMAT ...], --output_format OUTPUT_FORMAT [OUTPUT_FORMAT ...]
+                        Output format of the catalog, supported formats are:
+                        ds9, fits, star, kvis, ascii, csv. Only fits format
+                        includes all available information and can be used for
+                        further processing. Input can be multiple entries,
+                        e.g. -o fits ds9 (default = fits).
   -s SIZE, --size SIZE  If masking, multiply the size of the masks by this
                         amount (default = 1.0).
-  --ds9 [DS9]           Write the sources found to a ds9 region file,
-                        optionally give a number n, only the n brightest
-                        sources will be included in the file (default = do not
-                        create a region file).
   --plot [PLOT]         Plot the results of the sourcefinding as a png of the
                         image with sources overlaid, optionally provide an
                         output filename (default = do not plot the results).
@@ -50,8 +53,9 @@ optional arguments:
 
 ## catalog_matching.py
 
-Match a PyBDSF catalog to an external catalog. Choices are between NVSS, SUMSS and FIRST, or an specified catalog file (mileage may vary for this option). Different types of plots can be made to judge the systematics in the catalog. Example:
-`catalog_matching.py myimage_catalog.fits NVSS --astro --flux`
+Match a PyBDSF catalog to an external catalog. Choices are between NVSS, SUMSS and FIRST, or an specified catalog file (mileage may vary for this option). Different types of plots can be made to judge the systematics in the catalog. For example
+```catalog_matching.py myimage_catalog.fits NVSS --astro --flux```
+Will match the catalog `myimage_catalog.fits` to an external catalog, in this case the NVSS. The matched catalog is put out, and additionally plots are produced with the astrometric and flux offsets between the sources in the image
 
 ```
 usage: catalog_matching.py [-h] [-d DPI] [--astro [ASTRO]] [--flux [FLUX]]
@@ -88,9 +92,9 @@ optional arguments:
 
 ## catalog_analysis.py
 
-Analyze a PyBDSF catalog with different metrics regularly applied to radio astronomical data, like source counts and fraction of resolved sources. Example:
-`python catalog_analysis.py myimage_catalog.fits -r myimage_rms.fits`
-
+Analyze a PyBDSF catalog with different metrics regularly applied to radio astronomical data, like source counts and fraction of resolved sources. For example
+```python catalog_analysis.py myimage_catalog.fits -r myimage_rms.fits```
+Runs the catalog analysis on `myimage_catalog.fits` and produces plots for the number counts, resolved fraction, and differential number counts. The rms image given is used to correct the differential number counts for area coverage.
 
 ```
 usage: catalog_analysis.py [-h] [-r RMS_IMAGE] [-c COMP_CORR] [-d DPI] catalog
