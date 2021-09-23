@@ -202,12 +202,6 @@ def transform_cat(catalog, survey_name, argfile):
     catalog.meta['comments'] = catalog.meta['comments'][:2]
     catalog.meta.update(header)
 
-    drop_keys = ['PC1_1','PC2_1','PC3_1','PC4_1','PC1_2',
-                 'PC2_2','PC3_2','PC4_2','PC1_3','PC2_3',
-                 'PC3_3','PC4_3','PC1_4','PC2_4','PC3_4','PC4_4']
-    for key in drop_keys:
-        catalog.meta.pop(key)
-
     # Change NAXIS keywords so that astropy doesn't complain
     for key in ['NAXIS','NAXIS1','NAXIS2','NAXIS3','NAXIS4']:
         replacement = {key:key.replace('N','')}
