@@ -101,8 +101,14 @@ class Pointing:
         self.BMaj = float(header['BMAJ'])*3600 #arcsec
         self.BMin = float(header['BMIN'])*3600 #arcsec
         self.BPA = float(header['BPA'])
-        self.freq = float(header['CRVAL3'])/1e6 #MHz
-        self.dfreq = float(header['CDELT3'])/1e6 #MHz
+
+        # Determine frequency axis:
+        for i in range(1,5):
+            if 'FREQ' in header['CTYPE'+str(i)]:
+                freq_idx = i
+                break
+        self.freq = float(header['CRVAL'+str(freq_idx)])/1e6 #MHz
+        self.dfreq = float(header['CDELT'+str(freq_idx)])/1e6 #MHz
 
         self.center = SkyCoord(float(header['CRVAL1'])*u.degree,
                                float(header['CRVAL2'])*u.degree)
@@ -301,13 +307,22 @@ def plot_astrometrics(pointing, ext, matches, astro, dpi):
     ax.axhline(0,-xmax_abs,xmax_abs, color='k', zorder=1)
     ax.axvline(0,-ymax_abs,ymax_abs, color='k', zorder=1)
 
+    ax.annotate('Median offsets', xy=(0.05,0.95), xycoords='axes fraction', fontsize=8)
+    # Determine mean and standard deviation of points RA
     ax.axhline(np.median(dDEC),-xmax_abs,xmax_abs, color='grey', linestyle='dashed', zorder=1)
     ax.axhline(np.median(dDEC)-np.std(dDEC),-xmax_abs,xmax_abs, color='grey', linestyle='dotted', zorder=1)
     ax.axhline(np.median(dDEC)+np.std(dDEC),-ymax_abs,ymax_abs, color='grey', linestyle='dotted', zorder=1)
+    ax.axhspan(np.median(dDEC)-np.std(dDEC),np.median(dDEC)+np.std(dDEC), alpha=0.2, color='grey')
+    ax.annotate(f'dRA = {np.median(dDEC):.2f}+-{np.std(dDEC):.2f}',
+                xy=(0.05,0.90), xycoords='axes fraction', fontsize=8)
 
+    # Determine mean and standard deviation of points in RA
     ax.axvline(np.median(dRA),-ymax_abs,ymax_abs, color='grey', linestyle='dashed', zorder=1)
     ax.axvline(np.median(dRA)-np.std(dRA),-xmax_abs,xmax_abs, color='grey', linestyle='dotted', zorder=1)
     ax.axvline(np.median(dRA)+np.std(dRA),-ymax_abs,ymax_abs, color='grey', linestyle='dotted', zorder=1)
+    ax.axvspan(np.median(dRA)-np.std(dRA),np.median(dRA)+np.std(dRA), alpha=0.2, color='grey')
+    ax.annotate(f'dDEC = {np.median(dRA):.2f}+-{np.std(dRA):.2f}',
+                xy=(0.05,0.85), xycoords='axes fraction', fontsize=8)
 
     ax.set_title(f'Astrometric offset of {len(dRA)} sources')
     ax.set_xlabel('RA offset (arcsec)')
