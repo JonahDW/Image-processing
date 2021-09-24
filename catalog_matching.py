@@ -327,7 +327,7 @@ def plot_astrometrics(pointing, ext, matches, astro, dpi):
     ax.set_title(f'Astrometric offset of {len(dRA)} sources')
     ax.set_xlabel('RA offset (arcsec)')
     ax.set_ylabel('DEC offset (arcsec)')
-    ax.legend()
+    ax.legend(loc='upper right')
 
     if astro is True:
         plt.savefig(os.path.join(pointing.dirname,f'match_{ext.name}_{pointing.name}_astrometrics.png'), dpi=dpi)
