@@ -246,8 +246,10 @@ def plot_catalog_match(pointing, ext, matches, plot, dpi):
         ell.set_facecolor('g')
         ell.set_alpha(0.5)
 
-    ax.set_xlim(pointing.RAmin, pointing.RAmax)
-    ax.set_ylim(pointing.DECmin, pointing.DECmax)
+    ax.set_xlim(pointing.center.ra.deg-0.5*pointing.fov.value,
+                pointing.center.ra.deg+0.5*pointing.fov.value)
+    ax.set_ylim(pointing.center.dec.deg-0.5*pointing.fov.value*np.cos(pointing.center.dec.rad),
+                pointing.center.dec.deg+0.5*pointing.fov.value*np.cos(pointing.center.dec.rad))
     ax.set_xlabel('RA (degrees)')
     ax.set_ylabel('DEC (degrees)')
 
@@ -298,8 +300,14 @@ def plot_astrometrics(pointing, ext, matches, astro, dpi):
 
     ax.axhline(0,-xmax_abs,xmax_abs, color='k', zorder=1)
     ax.axvline(0,-ymax_abs,ymax_abs, color='k', zorder=1)
+
     ax.axhline(np.median(dDEC),-xmax_abs,xmax_abs, color='grey', linestyle='dashed', zorder=1)
+    ax.axhline(np.median(dDEC)-np.std(dDEC),-xmax_abs,xmax_abs, color='grey', linestyle='dotted', zorder=1)
+    ax.axhline(np.median(dDEC)+np.std(dDEC),-ymax_abs,ymax_abs, color='grey', linestyle='dotted', zorder=1)
+
     ax.axvline(np.median(dRA),-ymax_abs,ymax_abs, color='grey', linestyle='dashed', zorder=1)
+    ax.axvline(np.median(dRA)-np.std(dRA),-xmax_abs,xmax_abs, color='grey', linestyle='dotted', zorder=1)
+    ax.axvline(np.median(dRA)+np.std(dRA),-ymax_abs,ymax_abs, color='grey', linestyle='dotted', zorder=1)
 
     ax.set_title(f'Astrometric offset of {len(dRA)} sources')
     ax.set_xlabel('RA offset (arcsec)')
