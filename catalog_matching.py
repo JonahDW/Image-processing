@@ -313,7 +313,7 @@ def plot_astrometrics(pointing, ext, matches, astro, dpi):
     ax.axhline(np.median(dDEC)-np.std(dDEC),-xmax_abs,xmax_abs, color='grey', linestyle='dotted', zorder=1)
     ax.axhline(np.median(dDEC)+np.std(dDEC),-ymax_abs,ymax_abs, color='grey', linestyle='dotted', zorder=1)
     ax.axhspan(np.median(dDEC)-np.std(dDEC),np.median(dDEC)+np.std(dDEC), alpha=0.2, color='grey')
-    ax.annotate(f'dRA = {np.median(dDEC):.2f}+-{np.std(dDEC):.2f}',
+    ax.annotate(f'dDEC = {np.median(dDEC):.2f}+-{np.std(dDEC):.2f}',
                 xy=(0.05,0.90), xycoords='axes fraction', fontsize=8)
 
     # Determine mean and standard deviation of points in RA
@@ -321,7 +321,7 @@ def plot_astrometrics(pointing, ext, matches, astro, dpi):
     ax.axvline(np.median(dRA)-np.std(dRA),-xmax_abs,xmax_abs, color='grey', linestyle='dotted', zorder=1)
     ax.axvline(np.median(dRA)+np.std(dRA),-ymax_abs,ymax_abs, color='grey', linestyle='dotted', zorder=1)
     ax.axvspan(np.median(dRA)-np.std(dRA),np.median(dRA)+np.std(dRA), alpha=0.2, color='grey')
-    ax.annotate(f'dDEC = {np.median(dRA):.2f}+-{np.std(dRA):.2f}',
+    ax.annotate(f'dRA = {np.median(dRA):.2f}+-{np.std(dRA):.2f}',
                 xy=(0.05,0.85), xycoords='axes fraction', fontsize=8)
 
     ax.set_title(f'Astrometric offset of {len(dRA)} sources')

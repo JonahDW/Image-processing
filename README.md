@@ -28,7 +28,7 @@ usage: sourcefinding.py [-h] [-o OUTPUT_FORMAT [OUTPUT_FORMAT ...]] [-s SIZE]
 
 positional arguments:
   mode                  Purpose of the sourcefinding, choose between
-                        cataloging (c) or masking (m). This choice will
+                        cataloging (catalog) or masking (mask). This choice will
                         determine the parameter file that PyBDSF will use, as
                         well as the output files.
   image                 Name of the image to perform sourcefinding on.
