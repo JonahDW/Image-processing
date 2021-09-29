@@ -22,16 +22,16 @@ import helpers
 
 class SourceEllipse:
 
-    def __init__(self, catalog_entry, ra='RA', dec='DEC', majax='Maj', minax='Min', pa='PA', peak_flux='Peak_flux', total_flux='Total_flux'):
-        self.RA = catalog_entry[ra]
-        self.DEC = catalog_entry[dec]
-        self.Maj = catalog_entry[majax]
-        self.Min = catalog_entry[minax]
-        self.PA = catalog_entry[pa]
-        if peak_flux:
-            self.PeakFlux = catalog_entry[peak_flux]
-        if total_flux:
-            self.IntFlux = catalog_entry[total_flux]
+    def __init__(self, catalog_entry, column_dict):
+        self.RA = catalog_entry[column_dict['ra']]
+        self.DEC = catalog_entry[column_dict['dec']]
+        self.Maj = catalog_entry[column_dict['majax']]
+        self.Min = catalog_entry[column_dict['minax']]
+        self.PA = catalog_entry[column_dict['pa']]
+        if column_dict['peak_flux']:
+            self.PeakFlux = catalog_entry[column_dict['peak_flux']]
+        if column_dict['total_flux']:
+            self.IntFlux = catalog_entry[column_dict['total_flux']]
 
     def match(self, ra_list, dec_list, separation = 0):
         '''
@@ -68,7 +68,9 @@ class ExternalCatalog:
         self.cat = catalog
 
         if name in ['NVSS','SUMSS','FIRST']:
-            self.sources = [SourceEllipse(source) for source in self.cat]
+            columns = {'ra':'RA','dec':'DEC','majax':'Maj','minax':'Min',
+                       'pa':'PA','peak_flux':'Peak_flux','total_flux':'Total_flux'}
+            self.sources = [SourceEllipse(source, columns) for source in self.cat]
             beam, freq = helpers.get_beam(name, center.ra.deg, center.dec.deg)
 
             self.BMaj = beam[0]
@@ -86,7 +88,7 @@ class ExternalCatalog:
             if  n_rejected > 0:
                 print(f'Excluding {n_rejected} sources that have a negative quality flag')
 
-            self.sources = [SourceEllipse(source, **cat_info['data_columns']) for source in self.cat]
+            self.sources = [SourceEllipse(source, cat_info['data_columns']) for source in self.cat]
             self.BMaj = cat_info['properties']['BMAJ']
             self.BMin = cat_info['properties']['BMIN']
             self.BPA = cat_info['properties']['BPA']
@@ -100,7 +102,10 @@ class Pointing:
         self.cat = catalog[catalog['Quality_flag'] > 0]
         if len(self.cat) < len(catalog):
             print(f'Excluding {len(catalog) - len(self.cat)} sources that have a negative quality flag')
-        self.sources = [SourceEllipse(source) for source in self.cat]
+
+        columns = {'ra':'RA','dec':'DEC','majax':'Maj','minax':'Min',
+                   'pa':'PA','peak_flux':'Peak_flux','total_flux':'Total_flux'}
+        self.sources = [SourceEllipse(source, columns) for source in self.cat]
 
         # Parse meta
         header = catalog.meta
