@@ -189,14 +189,16 @@ def transform_cat(catalog, survey_name, argfile):
                                                       pad=True)) for coord in source_coord]
 
     dra, ddec = pointing_center.spherical_offsets_to(source_coord)
+    quality_flag = [1] * len(catalog)
 
     # Add columns at appropriate indices
     col_a = Column(pointing_name, name='Pointing_id')
     col_b = Column(ids, name='Source_name')
     col_c = Column(dra, name='dRA_PC')
     col_d = Column(ddec, name='dDEC_PC')
-    catalog.add_columns([col_a, col_b, col_c, col_d],
-                         indexes=[0,0,4,6])
+    col_e = Column(quality_flag, name='Quality_flag')
+    catalog.add_columns([col_a, col_b, col_c, col_d, col_e],
+                         indexes=[0,0,4,6,-1])
 
     # Update catalog meta
     catalog.meta['comments'] = catalog.meta['comments'][:2]

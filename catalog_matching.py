@@ -68,7 +68,7 @@ class ExternalCatalog:
         self.cat = catalog
 
         if name in ['NVSS','SUMSS','FIRST']:
-            self.sources = [SourceEllipse(source) for source in catalog]
+            self.sources = [SourceEllipse(source) for source in self.cat]
             beam, freq = helpers.get_beam(name, center.ra.deg, center.dec.deg)
 
             self.BMaj = beam[0]
@@ -80,7 +80,13 @@ class ExternalCatalog:
             with open(path) as f:
                 cat_info = json.load(f)
 
-            self.sources = [SourceEllipse(source, **cat_info['data_columns']) for source in catalog]
+            if cat_info['data_columns']['quality_flag']:
+                self.cat = self.cat[self.cat[cat_info['data_columns']['quality_flag']] > 0]
+            n_rejected = len(self.cat[self.cat[cat_info['data_columns']['quality_flag']] > 0])
+            if  n_rejected > 0:
+                print(f'Excluding {n_rejected} sources that have a negative quality flag')
+
+            self.sources = [SourceEllipse(source, **cat_info['data_columns']) for source in self.cat]
             self.BMaj = cat_info['properties']['BMAJ']
             self.BMin = cat_info['properties']['BMIN']
             self.BPA = cat_info['properties']['BPA']
@@ -91,8 +97,10 @@ class Pointing:
     def __init__(self, catalog, filename):
         self.dirname = os.path.dirname(filename)
 
-        self.cat = catalog
-        self.sources = [SourceEllipse(source) for source in catalog]
+        self.cat = catalog[catalog['Quality_flag'] > 0]
+        if len(self.cat) < len(catalog):
+            print(f'Excluding {len(catalog) - len(self.cat)} sources that have a negative quality flag')
+        self.sources = [SourceEllipse(source) for source in self.cat]
 
         # Parse meta
         header = catalog.meta
