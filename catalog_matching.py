@@ -354,36 +354,31 @@ def plot_fluxes(pointing, ext, matches, fluxtype, flux, alpha, dpi):
     '''
     ext_flux = []
     int_flux = []
-    RA_off = []
-    DEC_off = []
+    separation = []
     if fluxtype == 'Total':
         for i, match in enumerate(matches):
             if len(match) > 0:
                 ext_flux.append(ext.sources[i].IntFlux)
                 int_flux.append(np.sum([pointing.sources[m].IntFlux for m in match]))
-                RA_off.append(ext.sources[i].RA - pointing.center.ra.deg)
-                DEC_off.append(ext.sources[i].DEC - pointing.center.dec.deg)
+                source_coord = SkyCoord(ext.sources[i].RA, ext.sources[i].DEC, unit='deg')
+                separation.append(source_coord.separation(pointing.center).deg)
     elif fluxtype == 'Peak':
         for i, match in enumerate(matches):
             if len(match) > 0:
                 ext_flux.append(ext.sources[i].PeakFlux)
                 int_flux.append(np.sum([pointing.sources[m].PeakFlux for m in match]))
-                RA_off.append(ext.sources[i].RA - pointing.center.ra.deg)
-                DEC_off.append(ext.sources[i].DEC - pointing.center.dec.deg)
+                source_coord = SkyCoord(ext.sources[i].RA, ext.sources[i].DEC, unit='deg')
+                separation.append(source_coord.separation(pointing.center).deg)
     else:
         print(f'Invalid fluxtype {fluxtype}, choose between Total or Peak flux')
         sys.exit()
-
-    # Get proper angular offset
-    RA_off = (np.array(RA_off) + 180.) % 360. - 180.
-    center_dist = np.sqrt(np.array(RA_off)**2 + np.array(DEC_off)**2)
 
     # Scale flux density to proper frequency
     ext_flux_corrected = np.array(ext_flux) * (pointing.freq/ext.freq)**-alpha
     dFlux = np.array(int_flux)/ext_flux_corrected
 
     fig, ax = plt.subplots()
-    ax.scatter(center_dist, dFlux, color='k', marker='.', s=5)
+    ax.scatter(separation, dFlux, color='k', marker='.', s=5)
 
     ax.set_title(f'Flux ratio of {len(dFlux)} sources')
     ax.set_xlabel('Distance from pointing center (degrees)')
