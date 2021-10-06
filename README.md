@@ -53,6 +53,62 @@ optional arguments:
   --survey SURVEY       Name of the survey to be used in source ids.
 ```
 
+## source_catalogue_crusher.py
+
+The puprose of this tool is to mark individual sources in the
+catalogue not to be used. So essentailly to clean up the catalogue or
+specify sources to be used in the next steps e.g. in the catalog
+matching.
+It also can generate a KVIS annotation file
+and provide easy way to edit the Quality flag in the catalogue. The
+following example will generate a KVIS annotation file.
+
+```python sourcefinding.py --CAT_FILE=CATALOUGE.fits --KVISANNOUTPUT=CATALOUGE```
+
+
+
+```
+Options:
+  -h, --help            show this help message and exit
+  --CAT_FILE=CATFILE    CAT - file name e.g. CATALOUGE.fits
+  --OUTPUTNAME=OUTPUTFILENAME
+                        CATALOUGE outputfile name e.g. CATALOUGE.fits
+  --DO_SELECT_PYBDSF_TYPE=DOSELECTTYPE
+                        Select catalouges sources on type. [e.g. M or -M, this
+                        would select all except M]
+  --DO_SELECT_SOURCE_MAJ_DECON=DOSELECTSOURCES_MAJ_DECON
+                        Select  sources on deconvolved major axis = minor axis
+                        = zero
+  --DO_SELECT_SOURCE_MAJ_FIT=DOSELECTEXTENDEDSOURCES
+                        Select sources Major Axis FIT that is larger than the
+                        Deconvolved Maj Axis, input value is sigma or -sigma
+                        to exclude these source
+  --DO_SELECT_SOURCE_TOTFLX_ISLANDFLX=DOSELECTONFLUXDENSITY
+                        Select  sources on total flux density matching the
+                        total island flux density, input value is sigma or
+                        -sigma to exclude these sources
+  --DO_SELECT_ON=DOSELECTON
+                        Set selection based on table column [e.g. Maj]
+  --DO_SELECT_OPERATION=DOSELECTONOPERATION
+                        Input operation of selection [e.g. = (default), >, <]
+  --DO_SELECT_VALUE=DOSELECTONVALUE
+                        Input value of selection
+  --KVISANNOUTPUT=KVISOUTPUTFILENAME
+                        KVIS annotation outputfile name e.g. CATALOUGE.ann
+  --KVISCOLOR=KVISCOLOR
+                        Change COLOR of KVIS annotation [e.g. RANDOM ]
+  --KVISPRINT           use the fitted values Maj,Min,PA or deconvolved values
+                        DC_Maj, DC_Min, DC_PA
+  --TABLECOLUMNOUTPUT=TCOLUMNOUTFILENAME
+                        write table column output as ASCII to be edit by hand
+  --TABLECOLUMNINPUT=TCOLUMNINFILENAME
+                        read table column ASCII file.
+  --DO_PRINT_INFO       Print some statistics of the catalouge
+  --DO_PRINT_TAB_COLUMN
+                        Print some information of the catalouge
+```
+
+
 ## catalog_matching.py
 
 Match a PyBDSF catalog to an external catalog. Choices are between NVSS, SUMSS and FIRST, or a specified catalog file (mileage may vary for this option). Different types of plots can be made to judge the systematics in the catalog. For example
