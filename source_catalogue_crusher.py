@@ -384,7 +384,7 @@ def main():
     if tot_selected_sources > 0:
         if len(outputfilename) > 0:
 
-            if outputfilename.count('.FITS') == 0 or outputfilename.count('.fits') == 0:
+            if outputfilename.count('.FITS') == 0 and outputfilename.count('.fits') == 0:
                 outputfilename = outputfilename+'.FITS'
 
 
