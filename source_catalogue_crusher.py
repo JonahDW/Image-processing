@@ -36,7 +36,7 @@ from kvis_write_lib import *
 
 # Isl_Total_flux: the total, integrated Stokes I flux density of the island in which the source is located, in Jy. 
 # This value is calculated from the sum of all non-masked pixels in the island with values above thresh_isl
-# E_Isl_Total_flux: the 1-σ error on the total flux density of the island in which the source is located, in Jy
+# E_Isl_Total_flux: the 1-sigma error on the total flux density of the island in which the source is located, in Jy
 
 # Total_flux
 # E_Total_flux 
@@ -144,18 +144,15 @@ def main():
     # --------------------------------------------------------------------------
     # --------------------------------------------------------------------------
 
-
+    # read the fits catalouge (not for writing the file is reopend differently)
     hdul = fits.open(fits_tab)
-
-    hdr  = hdul[0].header
 
     # cata data
     data  = hdul[1].data
-    #print(data[0])
 
     # column information
     cols  = hdul[1].columns
-    
+
     # print cataloge colomn
     #
     if doprtcatacols:
@@ -165,6 +162,7 @@ def main():
         #print(cols.dtype)
         #print(cols.names)
         #print(cols.units)
+        print(cols)
 
         c = 1
         print('\n\n === Catalog Column  ===')
@@ -176,7 +174,8 @@ def main():
 
 
     # get the pre-selection flag
-    Quality_Flag     = hdul[1].data['Quality_flag']
+    #Quality_Flag     = hdul[1].data['Quality_flag']
+    Quality_Flag     = data['Quality_flag']
     pre_select       = Quality_Flag.astype(dtype=bool)
 
     # get the data
@@ -384,19 +383,28 @@ def main():
     if tot_selected_sources > 0:
         if len(outputfilename) > 0:
 
-            if outputfilename.count('.FITS') == 0 or outputfilename.count('.fits') == 0:
+            if outputfilename.count('.FITS') == 0 and outputfilename.count('.fits') == 0:
                 outputfilename = outputfilename+'.FITS'
 
-
+            # convert bool array into integer array
             new_Q_select   = total_selection.astype(dtype=int)
 
-            hdul[1].data['Quality_flag'] = new_Q_select
+            # open file differently since some of the header information 
+            # is not passed properly if fits.BinTableHDU is used
+            #
 
-            newhdu = fits.BinTableHDU(data=hdul[1].data)
+            table_catalog        = Table.read(fits_tab)
 
-            newhdu.writeto(outputfilename)
+            table_catalog['Quality_flag'] = new_Q_select
 
-            hdul.close()
+            table_catalog.write(outputfilename)
+
+
+            # hdul[1].data['Quality_flag'] = new_Q_select
+            # newhdu = fits.BinTableHDU(data=hdul[1].data,header=catalog_header)
+            # newhdu.writeto(outputfilename)
+            # hdul.close()
+
             print('New Catalouge file has been written',outputfilename)
 
     else:
