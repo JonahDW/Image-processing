@@ -25,6 +25,7 @@ from regions import EllipseSkyRegion, Regions
 
 import bdsf
 import casacore.images as pim
+import helpers
 
 def run_bdsf(image, output_dir, argfile, output_format):
     '''
@@ -79,7 +80,7 @@ def run_bdsf(image, output_dir, argfile, output_format):
             if fmt.lower() == 'fits':
                 outcat = outcatalog
 
-    return outcat
+    return outcat, img
 
 def read_alpha(inpimage, catalog, regions):
     '''
@@ -115,33 +116,7 @@ def read_alpha(inpimage, catalog, regions):
     WW = ndimage.gaussian_filter(V, sigma=5, order=0)
 
     alpha == VV/WW
-
-    alpha_list = []
-    alpha_err_list = []
-    # Measure spectral index for each source
-    for i, source in enumerate(catalog):
-        pixel_region = pixel_regions[i]
-
-        mask = pixel_region.to_mask(mode='center')
-        mask_data = mask.to_image(alpha.shape).astype(bool)
-
-        alpha_values = alpha[mask_data]
-        weights = tt0[0].data[0,0,:,:][mask_data]
-
-        alpha_values = alpha_values.filled(np.nan)
-        weights = weights[~np.isnan(alpha_values)]
-        alpha_values = alpha_values[~np.isnan(alpha_values)]
-
-        # Get weighted mean and standard deviations
-        if len(alpha_values) > 0.5*np.sum(mask_data):
-            alpha_mean = np.nansum(alpha_values*weights)/np.sum(weights)
-            alpha_std = np.sqrt(np.nansum(weights*(alpha_values-alpha_mean)**2) / 
-                               (np.sum(weights)*(len(weights)-1 / len(weights))))
-            alpha_list.append(alpha_mean)
-            alpha_err_list.append(alpha_std)
-        else:
-            alpha_list.append(np.ma.masked)
-            alpha_err_list.append(np.ma.masked)
+    alpha_list, alpha_err_list = helpers.measure_image_regions(pixel_regions, alpha, weight_image=tt1[0].data[0,0,:,:])
 
     a = Column(alpha_list, name='Spectral_index')
     b = Column(alpha_err_list, name='E_Spectral_index')
@@ -153,7 +128,7 @@ def read_alpha(inpimage, catalog, regions):
 
     return catalog
 
-def transform_cat(catalog, survey_name, argfile):
+def transform_cat(catalog, survey_name, img, argfile):
     '''
     Add names for sources in the catalog following IAU naming conventions
     '''
@@ -209,6 +184,12 @@ def transform_cat(catalog, survey_name, argfile):
         replacement = {key:key.replace('N','')}
         for k, v in list(catalog.meta.items()):
             catalog.meta[replacement.get(k, k)] = catalog.meta.pop(k)
+
+    # Put beam and freq in header in case they're not already there
+    catalog.meta['SF_BMAJ'] = img.beam[0]
+    catalog.meta['SF_BMIN'] = img.beam[1]
+    catalog.meta['SF_BPA'] = img.beam[2]
+    catalog.meta['SF_TELE'] = img._telescope
 
     return catalog
 
@@ -300,7 +281,7 @@ def main():
     if output_format is None:
         output_format = ['fits']
 
-    outcat = run_bdsf(inpimage, output_dir, argfile=bdsf_args, output_format=output_format)
+    outcat, img = run_bdsf(inpimage, output_dir, argfile=bdsf_args, output_format=output_format)
 
     if not outcat:
         print('No FITS catalog generated, no further operations are performed')
@@ -318,7 +299,7 @@ def main():
     # Determine output by mode
     if mode.lower() in 'cataloging':
         outfile = outcat.replace('bdsfcat','catalog')
-        bdsf_cat = transform_cat(bdsf_cat, survey, bdsf_args)
+        bdsf_cat = transform_cat(bdsf_cat, survey, img, bdsf_args)
         print(f'Wrote catalog to {outfile}')
         bdsf_cat.write(outfile, overwrite=True)
         os.system('rm '+outcat)

@@ -30,6 +30,27 @@ def meerkat_lpb(a, b, freq, offset):
 
     return a_beam
 
+def flux_correction(center_dist, freq, dfreq, alpha):
+    # Correct flux modified beam pattern induced by spectral shape
+    freqs = np.linspace(freq-dfreq/2,freq+dfreq/2,100)/1e3
+    flux = freqs**(-alpha)
+
+    ref_beam = meerkat_lpb(0.985, 1.189, freqs, 0)
+    ref_flux = np.trapz(flux*ref_beam, freqs)
+
+    total_flux = []
+    attenuation = []
+    for offset in center_dist:
+        beam = meerkat_lpb(0.985, 1.189, freqs, offset)
+        total_flux.append(np.trapz(flux*beam, freqs)/ref_flux)
+
+        beam_cen = meerkat_lpb(0.985, 1.189, freq/1e3, offset)
+        attenuation.append(beam_cen)
+
+    correction = np.array(total_flux)/np.array(attenuation)
+
+    return correction
+
 def get_beam(identity, ra_center, dec_center):
     '''
     Get the beam and frequency of a given survey. As for some surveys
@@ -61,3 +82,43 @@ def get_beam(identity, ra_center, dec_center):
 
     beam = [BMaj,BMin,BPA]
     return beam, freq
+
+def measure_image_regions(pixel_regions, image, weight_image=None):
+    '''
+    Measure values in images an from given regions
+
+    Keyword arguments:
+    pixel_ragions -- Regions of pixels to get values from
+    image         -- Image to measure values from
+    weight_image  -- Optional image containing weights
+    '''
+    values = []
+    err_values = []
+    # Measure value for each source
+    for region in pixel_regions:
+        mask = region.to_mask(mode='center')
+        mask_data = mask.to_image(image.shape).astype(bool)
+
+        image_values = image[mask_data]
+        image_values = image_values.filled(np.nan)
+
+        nan_values = np.isnan(image_values)
+        image_values = image_values[~nan_values]
+        if weight_image is None:
+            weights = np.ones(image_values.shape)
+        else:
+            weights = weight_image[mask_data]
+            weights = weights[~nan_values]
+
+        # Get weighted mean and standard deviations
+        if len(image_values) > 0.5*np.sum(mask_data):
+            mean = np.nansum(image_values*weights)/np.sum(weights)
+            std = np.sqrt(np.nansum(weights*(image_values-mean)**2) /
+                         (np.sum(weights)*(len(weights)-1 / len(weights))))
+            values.append(mean)
+            err_values.append(std)
+        else:
+            values.append(np.ma.masked)
+            err_values.append(np.ma.masked)
+
+    return values, err_values

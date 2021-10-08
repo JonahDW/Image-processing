@@ -48,6 +48,17 @@ class Catalog:
         self.bmaj = np.array(header['BMAJ'].split(','), dtype=float)
         self.bmin = np.array(header['BMIN'].split(','), dtype=float)
 
+        # Determine frequency axis:
+        for i in range(1,5):
+            if 'FREQ' in header['CTYPE'+str(i)]:
+                freq_idx = i
+                break
+        self.freq = np.array(header['CRVAL'+str(freq_idx)].split(','), dtype=float)/1e6 #MHz
+        self.dfreq = np.array(header['CDELT'+str(freq_idx)].split(','), dtype=float)/1e6 #MHz
+
+        self.center = SkyCoord(np.array(header['CRVAL1'].split(','), dtype=float)*u.degree,
+                               np.array(header['CRVAL2'].split(','), dtype=float)*u.degree)
+
         self.dN = None
         self.edges = None
 
@@ -99,8 +110,27 @@ class Catalog:
         flux_col -- Which table column to use for flux, should be the same
                     as the one used to define the bins
         '''
+        # Correct fluxes for primary beam pattern
+        source_coord = SkyCoord(self.table['RA'], self.table['DEC'], unit='deg')
+        offsets = source_coord.separation(self.center).deg
+        flux_corr = helpers.flux_correction(offsets, self.freq[0], self.dfreq[0], 0.8)
+
+        self.table[flux_col] /= flux_corr
+
         bin_means = [np.mean(self.table[flux_col][np.logical_and(self.table[flux_col] > self.edges[i],
                              self.table[flux_col] < self.edges[i+1])]) for i in range(len(self.edges)-1)]
+        solid_angle = self.pix_area*self.pix_size**2*(np.pi/180)**2
+        dS = np.diff(self.edges)
+        S = np.array(bin_means)
+
+        count_correction = 1
+        if completeness:
+            # Get data from specified file
+            data = helpers.pickle_from_file(completeness)
+            flux_means = np.array([(data[0][i]+data[0][i+1])/2 for i in range(len(data[0])-1)])
+
+            comp_frac = interp1d(flux_means, np.mean(data[1], axis=0), bounds_error=False, fill_value=(0,1))
+            count_correction = comp_frac(S)
 
         if rms_image:
             image = fits.open(rms_image)[0]
@@ -110,10 +140,9 @@ class Catalog:
             coverage = [np.sum([rms_data < rms])/np.count_nonzero(~np.isnan(rms_data)) for rms in rms_range]
 
             # Define a splin and interpolate the values
-            data_spline = UnivariateSpline(rms_range, coverage, s=0, k=3, ext=3)
-            interp_bins = data_spline(np.array(bin_means)/4.5)
-
-            angular_size = interp_bins*self.pix_size**2/3283
+            rms_coverage = interp1d(rms_range, coverage, fill_value='extrapolate')
+            count_correction = rms_coverage(S/5.0)
+            solid_angle = np.count_nonzero(~np.isnan(rms_data))*self.pix_size**2*(np.pi/180)**2
 
             # Plot rms coverage
             plt.plot(rms_range, coverage, linewidth=2, color='k')
@@ -127,25 +156,13 @@ class Catalog:
             plt.savefig(os.path.join(self.dirname, self.cat_name+'_rms_coverage.png'), dpi=300)
             plt.close()
 
-        if completeness:
-            # Get data from specified file
-            data = helpers.pickle_from_file(completeness)
-            flux_means = np.array([(data[0][i]+data[0][i+1])/2 for i in range(len(data[0])-1)])
-
-            comp_frac = interp1d(flux_means, data[1], fill_value='extrapolate')
-
-            self.dN = self.dN/comp_frac(bin_means)
-            angular_size = self.pix_area*self.pix_size**2/3283
-
-        dS = np.diff(self.edges)
-        S = np.array(bin_means)
-
         # Save diff number counts to pickle file
-        data = S, dS, self.dN, angular_size
+        data = S, dS, self.dN, solid_angle
         helpers.pickle_to_file(data, os.path.join(self.dirname, self.cat_name+'_diff_counts.pkl'))
 
-        plt.errorbar(S, S**(5/2)*self.dN/dS/angular_size,
-                     yerr=S**(5/2)*np.sqrt(self.dN)/dS/angular_size,
+        self.dN = self.dN/count_correction
+        plt.errorbar(S, S**(5/2)*self.dN/dS/solid_angle,
+                     yerr=S**(5/2)*np.sqrt(self.dN)/dS/solid_angle,
                      fmt='o', color='k', label='Catalog')
 
         # Get differential number counts from SKADS and plot
@@ -155,10 +172,11 @@ class Catalog:
 
         SKADS_dN, SKADS_edges = np.histogram(SKADS_total_flux, bins=self.edges)
         SKADS_dS = np.diff(SKADS_edges)
-        SKADS_angle = 10.0**2/3283
+        SKADS_angle = 10.0**2*(np.pi/180)**2
 
-        plt.plot(S, S**(5/2)*SKADS_dN/SKADS_dS/SKADS_angle, 
-                 ':rx', lw=0.5, label='SKADS Simulation')
+        plt.errorbar(S, S**(5/2)*SKADS_dN/SKADS_dS/SKADS_angle,
+                    yerr=S**(5/2)*np.sqrt(SKADS_dN)/SKADS_dS/SKADS_angle,
+                    fmt=':.', color='r', lw=0.5, label='SKADS Simulation')
 
         plt.xscale('log')
         plt.yscale('log')

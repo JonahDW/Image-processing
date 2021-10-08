@@ -110,10 +110,10 @@ class Pointing:
         # Parse meta
         header = catalog.meta
 
-        self.telescope = header['TELESCOP'].replace("'","")
-        self.BMaj = float(header['BMAJ'])*3600 #arcsec
-        self.BMin = float(header['BMIN'])*3600 #arcsec
-        self.BPA = float(header['BPA'])
+        self.telescope = header['SF_TELE'].replace("'","")
+        self.BMaj = float(header['SF_BMAJ'])*3600 #arcsec
+        self.BMin = float(header['SF_BMIN'])*3600 #arcsec
+        self.BPA = float(header['SF_BPA'])
 
         # Determine frequency axis:
         for i in range(1,5):
@@ -128,7 +128,10 @@ class Pointing:
         dec_fov = abs(float(header['CDELT1']))*float(header['CRPIX1'])*2
         self.fov = dec_fov/np.cos(self.center.dec.rad) * u.degree
 
-        self.name = header['OBJECT'].replace("'","")
+        try:
+            self.name = header['OBJECT'].replace("'","")
+        except KeyError:
+            self.name = os.path.basename(filename).split('.')[0]
 
     def query_NVSS(self):
         '''
@@ -215,26 +218,6 @@ def match_catalogs(pointing, ext):
         matches.append(source.match(pointing.cat['RA'], pointing.cat['DEC']))
 
     return matches
-
-def flux_correction(self, alpha):
-    # Correct flux modified beam pattern induced by spectral shape
-    freq = np.linspace(self.freq-self.dfreq,self.freq+self.dfreq,100)/1e3
-    flux = freq**(-alpha)
-
-    ref_beam = helpers.meerkat_lpb(0.985, 1.189, freq, 0)
-    ref_flux = np.trapz(flux*ref_beam, freq)
-
-    total_flux = []
-    attenuation = []
-    for offset in center_dist:
-        beam = helpers.meerkat_lpb(0.985, 1.189, freq, offset)
-        total_flux.append(np.trapz(flux*beam, freq)/ref_flux)
-
-        beam_cen = helpers.meerkat_lpb(0.985, 1.189, self.freq/1e3, offset)
-        attenuation.append(beam_cen)
-
-    correction = np.array(total_flux)/np.array(attenuation)
-    return correction
 
 def plot_catalog_match(pointing, ext, matches, plot, dpi):
     '''
