@@ -33,6 +33,8 @@ class SourceEllipse:
         if column_dict['total_flux']:
             self.IntFlux = catalog_entry[column_dict['total_flux']]
 
+        self.skycoord = SkyCoord(self.RA, self.DEC, unit='deg')
+
     def match(self, ra_list, dec_list, separation = 0):
         '''
         Match the ellipse with a (list of) source(s)
@@ -42,12 +44,15 @@ class SourceEllipse:
         dec_list -- Declination of sources
         separation (float) - Additional range in degrees
         '''
-        PA = np.radians(self.PA)
-        bool_points = ((np.cos(PA)*(ra_list-self.RA)
-                      +np.sin(PA)*(dec_list-self.DEC))**2
+        offset_coord = SkyCoord(ra_list, dec_list, unit='deg')
+        dra, ddec = self.skycoord.spherical_offsets_to(offset_coord)
+
+        PA = np.radians(self.PA) + 0.5*np.pi
+        bool_points = ((np.cos(PA)*(dra.deg)
+                      +np.sin(PA)*(ddec.deg))**2
                       /(self.Maj+separation)**2
-                      +(np.sin(PA)*(ra_list-self.RA)
-                      -np.cos(PA)*(dec_list-self.DEC))**2
+                      +(np.sin(PA)*(dra.deg)
+                      -np.cos(PA)*(ddec.deg))**2
                       /(self.Min+separation)**2) <= 1
 
         return np.where(bool_points)[0]
@@ -59,7 +64,7 @@ class SourceEllipse:
         return Ellipse(xy = (self.RA, self.DEC),
                         width = 2*self.Min,
                         height = 2*self.Maj,
-                        angle = -self.PA)
+                        angle = self.PA)
 
 class ExternalCatalog:
 
@@ -270,11 +275,9 @@ def plot_astrometrics(pointing, ext, matches, astro, dpi):
     dRA = []
     for i, match in enumerate(matches):
         if len(match) == 1:
-            dRA.append(ext.sources[i].RA - pointing.sources[match[0]].RA)
-            dDEC.append(ext.sources[i].DEC - pointing.sources[match[0]].DEC)
-
-    dRA = np.array(dRA)*3600
-    dDEC = np.array(dDEC)*3600
+            dra, ddec = ext.sources[i].skycoord.spherical_offsets_to(pointing.sources[match[0]].skycoord)
+            dRA.append(dra.arcsec)
+            dDEC.append(ddec.arcsec)
 
     fig, ax = plt.subplots()
     ax.scatter(dRA, dDEC, zorder=2, color='k', marker='.', s=5)

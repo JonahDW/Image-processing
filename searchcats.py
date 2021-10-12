@@ -71,8 +71,8 @@ def getsumssdata(ra,dec,offset):
     if sumssfile:
         sumsstable = ascii.read(sumssfile, names=sumss_columns, exclude_names=exclude_columns)
 
-        sumss_coordinates = SkyCoord([[source[0:11]] for source in sumssfile],
-                                     [[source[13:24]] for source in sumssfile],
+        sumss_coordinates = SkyCoord([source[0:11] for source in sumssfile],
+                                     [source[13:24] for source in sumssfile],
                                      unit=(u.hourangle,u.deg))
 
         sumssids = ['SUMSS J{0}{1}'.format(coord.ra.to_string(unit=u.hourangle,
@@ -93,7 +93,7 @@ def getsumssdata(ra,dec,offset):
         # Match SUMSS catalog to RA and DEC within offset
         d2d = center.separation(sumss_coordinates)
         catalogmask = d2d < offset
-        sumssoutput = sumsstable[catalogmask[:,0]]
+        sumssoutput = sumsstable[catalogmask]
 
     return sumssoutput
 
