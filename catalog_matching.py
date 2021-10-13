@@ -14,8 +14,10 @@ from astropy.coordinates import SkyCoord
 
 import matplotlib
 matplotlib.use('Agg')
+from matplotlib import colors
 import matplotlib.pyplot as plt
 from matplotlib.patches import Ellipse
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 import searchcats as sc
 import helpers
@@ -47,13 +49,13 @@ class SourceEllipse:
         offset_coord = SkyCoord(ra_list, dec_list, unit='deg')
         dra, ddec = self.skycoord.spherical_offsets_to(offset_coord)
 
-        PA = np.radians(self.PA) + 0.5*np.pi
+        PA = np.radians(-self.PA) + 0.5*np.pi
         bool_points = ((np.cos(PA)*(dra.deg)
                       +np.sin(PA)*(ddec.deg))**2
-                      /(self.Maj+separation)**2
+                      /(self.Maj/2+separation)**2
                       +(np.sin(PA)*(dra.deg)
                       -np.cos(PA)*(ddec.deg))**2
-                      /(self.Min+separation)**2) <= 1
+                      /(self.Min/2+separation)**2) <= 1
 
         return np.where(bool_points)[0]
 
@@ -62,9 +64,9 @@ class SourceEllipse:
         Convert the ellipse to a matplotlib artist
         '''
         return Ellipse(xy = (self.RA, self.DEC),
-                        width = 2*self.Min,
-                        height = 2*self.Maj,
-                        angle = self.PA)
+                        width = self.Min,
+                        height = self.Maj,
+                        angle = -self.PA)
 
 class ExternalCatalog:
 
@@ -273,14 +275,32 @@ def plot_astrometrics(pointing, ext, matches, astro, dpi):
     '''
     dDEC = []
     dRA = []
+    n_matches = []
     for i, match in enumerate(matches):
-        for m in match:
-            dra, ddec = ext.sources[i].skycoord.spherical_offsets_to(pointing.sources[m].skycoord)
-            dRA.append(dra.arcsec)
-            dDEC.append(ddec.arcsec)
+        if len(match) > 0:
+            for m in match:
+                dra, ddec = ext.sources[i].skycoord.spherical_offsets_to(pointing.sources[m].skycoord)
+                dRA.append(dra.arcsec)
+                dDEC.append(ddec.arcsec)
+                n_matches.append(len(match))
+
+    cmap = colors.ListedColormap(["navy", "crimson", "limegreen", "gold"])
+    norm = colors.BoundaryNorm(np.arange(0.5, 5, 1), cmap.N)
 
     fig, ax = plt.subplots()
-    ax.scatter(dRA, dDEC, zorder=2, color='k', marker='.', s=5)
+    sc = ax.scatter(dRA, dDEC, zorder=2,
+                    marker='.', s=5,
+                    c=n_matches, cmap=cmap, norm=norm)
+
+    # Add colorbar to set matches
+    divider = make_axes_locatable(ax)
+    cax = divider.append_axes("right", size="5%", pad=0.1)
+    fig.add_axes(cax)
+    cbar = fig.colorbar(sc, cax=cax)
+
+    cbar.set_ticks([1,2,3,4])
+    cax.set_yticklabels(['1','2','3','>3'])
+    cax.set_title('Matches')
 
     ext_beam_ell = Ellipse(xy=(0,0),
                            width=ext.BMin,
@@ -341,6 +361,7 @@ def plot_fluxes(pointing, ext, matches, fluxtype, flux, alpha, dpi):
     ext_flux = []
     int_flux = []
     separation = []
+    n_matches = []
     if fluxtype == 'Total':
         for i, match in enumerate(matches):
             if len(match) > 0:
@@ -348,6 +369,7 @@ def plot_fluxes(pointing, ext, matches, fluxtype, flux, alpha, dpi):
                 int_flux.append(np.sum([pointing.sources[m].IntFlux for m in match]))
                 source_coord = SkyCoord(ext.sources[i].RA, ext.sources[i].DEC, unit='deg')
                 separation.append(source_coord.separation(pointing.center).deg)
+                n_matches.append(len(match))
     elif fluxtype == 'Peak':
         for i, match in enumerate(matches):
             if len(match) > 0:
@@ -355,6 +377,7 @@ def plot_fluxes(pointing, ext, matches, fluxtype, flux, alpha, dpi):
                 int_flux.append(np.sum([pointing.sources[m].PeakFlux for m in match]))
                 source_coord = SkyCoord(ext.sources[i].RA, ext.sources[i].DEC, unit='deg')
                 separation.append(source_coord.separation(pointing.center).deg)
+                n_matches.append(len(match))
     else:
         print(f'Invalid fluxtype {fluxtype}, choose between Total or Peak flux')
         sys.exit()
@@ -363,8 +386,23 @@ def plot_fluxes(pointing, ext, matches, fluxtype, flux, alpha, dpi):
     ext_flux_corrected = np.array(ext_flux) * (pointing.freq/ext.freq)**-alpha
     dFlux = np.array(int_flux)/ext_flux_corrected
 
+    cmap = colors.ListedColormap(["navy", "crimson", "limegreen", "gold"])
+    norm = colors.BoundaryNorm(np.arange(0.5, 5, 1), cmap.N)
+
     fig, ax = plt.subplots()
-    ax.scatter(separation, dFlux, color='k', marker='.', s=5)
+    sc = ax.scatter(separation, dFlux,
+                    marker='.', s=5,
+                    c=n_matches, cmap=cmap, norm=norm)
+
+    # Add colorbar to set matches
+    divider = make_axes_locatable(ax)
+    cax = divider.append_axes("right", size="5%", pad=0.1)
+    fig.add_axes(cax)
+    cbar = fig.colorbar(sc, cax=cax)
+
+    cbar.set_ticks([1,2,3,4])
+    cax.set_yticklabels(['1','2','3','>3'])
+    cax.set_title('Matches')
 
     ax.set_title(f'Flux ratio of {len(dFlux)} sources')
     ax.set_xlabel('Distance from pointing center (degrees)')
@@ -376,6 +414,74 @@ def plot_fluxes(pointing, ext, matches, fluxtype, flux, alpha, dpi):
     else:
         plt.savefig(flux, dpi=dpi)
     plt.close()
+
+def write_to_kvis(pointing, ext, matches, annotate):
+    '''
+    Write the results to a kvis annotation file
+    '''
+    match_ext_lines = []
+    match_int_lines = []
+    non_match_ext_lines = []
+    for i, match in enumerate(matches):
+        if len(match) > 0:
+            source = ext.sources[i]
+            toprt = f'ELLIPSE {source.RA:.6f} {source.DEC:.6f} {source.Maj/2:.6f} {source.Min/2:.6f} {source.PA:.4f} \n'
+            match_ext_lines.append(toprt)
+            for ind in match:
+                source = pointing.sources[ind]
+                toprt = f'ELLIPSE {source.RA:.6f} {source.DEC:.6f} {source.Maj/2:.6f} {source.Min/2:.6f} {source.PA:.4f} \n'
+                match_int_lines.append(toprt)
+        else:
+            source = ext.sources[i]
+            toprt = f'ELLIPSE {source.RA:.6f} {source.DEC:.6f} {source.Maj/2:.6f} {source.Min/2:.6f} {source.PA:.4f} \n'
+            non_match_ext_lines.append(toprt)
+
+    non_matches = np.setdiff1d(np.arange(len(pointing.sources)), np.concatenate(matches).ravel())
+    non_match_int_lines = []
+    for i in non_matches:
+        source = pointing.sources[i]
+        toprt = f'ELLIPSE {source.RA:.6f} {source.DEC:.6f} {source.Maj/2:.6f} {source.Min/2:.6f} {source.PA:.4f} \n'
+        non_match_int_lines.append(toprt)
+
+    if annotate is True:
+        outputfilename = os.path.join(pointing.dirname,f'match_{ext.name}_{pointing.name}.ann')
+    else:
+        outputfilename = annotate
+
+    kvisfile = open(outputfilename,'w')
+    kvisfile.writelines('# Annotation file used for KVIS\n')
+    kvisfile.writelines('# \n')
+
+    kvisfile.writelines('# Catalogues: '+ext.name+' and '+pointing.name+' \n')
+    kvisfile.writelines('# \n')
+
+    kvisfile.writelines('COORD W\n')
+    kvisfile.writelines('PA SKY\n')
+    kvisfile.writelines('FONT hershey14\n')
+
+    # Write different sources with different colors
+    kvisfile.writelines('# Matched sources from external catalog\n')
+    kvisfile.writelines('# \n')
+    kvisfile.writelines('COLOR BLUE\n')
+    for line in match_ext_lines:
+        kvisfile.writelines(line)
+    kvisfile.writelines('# Matched sources from internal catalog\n')
+    kvisfile.writelines('# \n')
+    kvisfile.writelines('COLOR RED\n')
+    for line in match_int_lines:
+        kvisfile.writelines(line)
+    kvisfile.writelines('# Non matched sources from external catalog\n')
+    kvisfile.writelines('# \n')
+    kvisfile.writelines('COLOR WHITE\n')
+    for line in non_match_ext_lines:
+        kvisfile.writelines(line)
+    kvisfile.writelines('# Non matched sources from internal catalog\n')
+    kvisfile.writelines('# \n')
+    kvisfile.writelines('COLOR GREEN\n')
+    for line in non_match_int_lines:
+        kvisfile.writelines(line)
+
+    kvisfile.close()
 
 def write_to_catalog(pointing, ext, matches, output):
     '''
@@ -411,6 +517,7 @@ def main():
     plot = args.plot
     alpha = args.alpha
     output = args.output
+    annotate = args.annotate
 
     pointing_cat = Table.read(pointing)
     pointing = Pointing(pointing_cat, pointing)
@@ -439,8 +546,6 @@ def main():
         exit()
 
     matches = match_catalogs(pointing, ext_catalog)
-#   plot_catalog_match(pointing, ext_catalog, matches, dpi)
-
     if plot:
         plot_catalog_match(pointing, ext_catalog, matches, plot, dpi)
     if astro:
@@ -449,6 +554,8 @@ def main():
         plot_fluxes(pointing, ext_catalog, matches, fluxtype, flux, alpha, dpi)
     if output:
         write_to_catalog(pointing, ext_catalog, matches, output)
+    if annotate:
+        write_to_kvis(pointing, ext_catalog, matches, annotate)
 
 def new_argument_parser():
 
@@ -487,6 +594,10 @@ def new_argument_parser():
     parser.add_argument("--output", nargs="?", const=True,
                         help="""Output the result of the matching into a catalog,
                                 optionally provide an output filename
+                                (default = don't output a catalog).""")
+    parser.add_argument("--annotate", nargs="?", const=True,
+                        help="""Output the result of the matching into a kvis
+                                annotation file, optionally provide an output filename
                                 (default = don't output a catalog).""")
     return parser
 
