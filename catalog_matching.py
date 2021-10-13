@@ -274,8 +274,8 @@ def plot_astrometrics(pointing, ext, matches, astro, dpi):
     dDEC = []
     dRA = []
     for i, match in enumerate(matches):
-        if len(match) == 1:
-            dra, ddec = ext.sources[i].skycoord.spherical_offsets_to(pointing.sources[match[0]].skycoord)
+        for m in match:
+            dra, ddec = ext.sources[i].skycoord.spherical_offsets_to(pointing.sources[m].skycoord)
             dRA.append(dra.arcsec)
             dDEC.append(ddec.arcsec)
 
