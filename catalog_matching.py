@@ -295,7 +295,6 @@ def plot_astrometrics(pointing, ext, matches, astro, dpi):
     # Add colorbar to set matches
     divider = make_axes_locatable(ax)
     cax = divider.append_axes("right", size="5%", pad=0.1)
-    fig.add_axes(cax)
     cbar = fig.colorbar(sc, cax=cax)
 
     cbar.set_ticks([1,2,3,4])
@@ -397,7 +396,6 @@ def plot_fluxes(pointing, ext, matches, fluxtype, flux, alpha, dpi):
     # Add colorbar to set matches
     divider = make_axes_locatable(ax)
     cax = divider.append_axes("right", size="5%", pad=0.1)
-    fig.add_axes(cax)
     cbar = fig.colorbar(sc, cax=cax)
 
     cbar.set_ticks([1,2,3,4])
@@ -473,6 +471,7 @@ def write_to_kvis(pointing, ext, matches, annotate):
     kvisfile.writelines('# Non matched sources from external catalog\n')
     kvisfile.writelines('# \n')
     kvisfile.writelines('COLOR WHITE\n')
+    '''
     for line in non_match_ext_lines:
         kvisfile.writelines(line)
     kvisfile.writelines('# Non matched sources from internal catalog\n')
@@ -480,6 +479,7 @@ def write_to_kvis(pointing, ext, matches, annotate):
     kvisfile.writelines('COLOR GREEN\n')
     for line in non_match_int_lines:
         kvisfile.writelines(line)
+    '''
 
     kvisfile.close()
 
