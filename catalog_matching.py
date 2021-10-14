@@ -319,6 +319,13 @@ def plot_astrometrics(pointing, ext, matches, astro, dpi):
 
     ymax_abs = abs(max(ax.get_ylim(), key=abs))
     xmax_abs = abs(max(ax.get_xlim(), key=abs))
+    
+    # Equalise the axis to get no distortion of the beams
+    xymax    = abs(max(xmax_abs,ymax_abs))
+    xmax_abs = xymax
+    ymax_abs = xymax
+
+    
     ax.set_ylim(ymin=-ymax_abs, ymax=ymax_abs)
     ax.set_xlim(xmin=-xmax_abs, xmax=xmax_abs)
 
