@@ -132,7 +132,7 @@ class Pointing:
 
         self.center = SkyCoord(float(header['CRVAL1'])*u.degree,
                                float(header['CRVAL2'])*u.degree)
-        dec_fov = abs(float(header['CDELT1']))*float(header['CRPIX1'])*2
+        dec_fov = abs(float(header['CDELT1']))*float(header['CRPIX1'])
         self.fov = dec_fov/np.cos(self.center.dec.rad) * u.degree
 
         try:
@@ -146,7 +146,7 @@ class Pointing:
         '''
         nvsstable = sc.getnvssdata(ra = [self.center.ra.to_string(u.hourangle, sep=' ')],
                                    dec = [self.center.dec.to_string(u.deg, sep=' ')],
-                                   offset = 0.5*self.fov.to(u.arcsec))
+                                   offset = self.fov.to(u.arcsec))
 
         if not nvsstable:
             sys.exit()
@@ -170,7 +170,7 @@ class Pointing:
         '''
         firsttable = sc.getfirstdata(ra = [self.center.ra.to_string(u.hourangle, sep=' ')],
                                      dec = [self.center.dec.to_string(u.deg, sep=' ')],
-                                     offset = 0.5*self.fov.to(u.arcsec))
+                                     offset = self.fov.to(u.arcsec))
 
         if not firsttable:
             sys.exit()
@@ -199,7 +199,7 @@ class Pointing:
 
         sumsstable = sc.getsumssdata(ra = self.center.ra,
                                      dec = self.center.dec,
-                                     offset = 0.5*self.fov)
+                                     offset = self.fov)
 
         sumsstable['Maj'].unit = u.arcsec
         sumsstable['Min'].unit = u.arcsec
@@ -255,10 +255,10 @@ def plot_catalog_match(pointing, ext, matches, plot, dpi):
         ell.set_facecolor('g')
         ell.set_alpha(0.5)
 
-    ax.set_xlim(pointing.center.ra.deg-0.5*pointing.fov.value,
-                pointing.center.ra.deg+0.5*pointing.fov.value)
-    ax.set_ylim(pointing.center.dec.deg-0.5*pointing.fov.value*np.cos(pointing.center.dec.rad),
-                pointing.center.dec.deg+0.5*pointing.fov.value*np.cos(pointing.center.dec.rad))
+    ax.set_xlim(pointing.center.ra.deg-pointing.fov.value,
+                pointing.center.ra.deg+pointing.fov.value)
+    ax.set_ylim(pointing.center.dec.deg-pointing.fov.value*np.cos(pointing.center.dec.rad),
+                pointing.center.dec.deg+pointing.fov.value*np.cos(pointing.center.dec.rad))
     ax.set_xlabel('RA (degrees)')
     ax.set_ylabel('DEC (degrees)')
 

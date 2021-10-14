@@ -3,13 +3,14 @@
         "thresh_isl" : 3.0,
         "thresh_pix" : 5.0,
         "group_tol" : 10.0,
-        "rms_box" : "(150,15)",
+        "rms_box" : "(150,30)",
         "adaptive_rms_box" : true,
         "adaptive_thresh" : 100.0,
-        "rms_box_bright" : "(40,15)",
+        "rms_box_bright" : "(20,10)",
 	"atrous_do" : true,
 	"atrous_orig_isl" : true,
-	"atrous_jmax" : 3
+	"atrous_jmax" : 3,
+	"mean_map" : "zero"
     },
     "export_image" : {
         "ch0" : true,
