@@ -19,6 +19,8 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Ellipse
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 
+from shapely.geometry import Polygon
+
 import searchcats as sc
 import helpers
 
@@ -37,7 +39,7 @@ class SourceEllipse:
 
         self.skycoord = SkyCoord(self.RA, self.DEC, unit='deg')
 
-    def match(self, ra_list, dec_list, separation = 0):
+    def match(self, ra_list, dec_list, maj_list, min_list, pa_list, separation = 0):
         '''
         Match the ellipse with a (list of) source(s)
 
@@ -47,17 +49,39 @@ class SourceEllipse:
         separation (float) - Additional range in degrees
         '''
         offset_coord = SkyCoord(ra_list, dec_list, unit='deg')
-        dra, ddec = self.skycoord.spherical_offsets_to(offset_coord)
 
-        PA = np.radians(-self.PA) + 0.5*np.pi
-        bool_points = ((np.cos(PA)*(dra.deg)
-                      +np.sin(PA)*(ddec.deg))**2
-                      /(self.Maj/2+separation)**2
-                      +(np.sin(PA)*(dra.deg)
-                      -np.cos(PA)*(ddec.deg))**2
-                      /(self.Min/2+separation)**2) <= 1
+        sky_separation = self.skycoord.separation(offset_coord) 
 
-        return np.where(bool_points)[0]
+        # Check if sources match within Bmaj boundaries
+        # these source could match or not this needs to
+        # be checked
+        maj_match = sky_separation < self.Maj/2. + maj_list + separation
+
+        # Check if sources match within Bmin boundaries
+        # these are the source we do not need to check 
+        # further, they always match
+        min_match = sky_separation <= self.Min/2. + min_list + separation
+        
+
+        # Check out the source between the maj_match and min_match boundaries
+        #
+        if max(np.array(np.where(np.logical_xor(min_match,maj_match))).shape) > 0:
+
+            msour_idx = np.where(np.logical_xor(min_match,maj_match))[0].flatten()
+            
+            for s in msour_idx:
+
+                # this is a realy cool thing
+                # essentially use the matplotlib Ellipse convert it to vertices and to a Polygon use shpely to check if they intersect
+                # https://gis.stackexchange.com/questions/243459/drawing-ellipse-with-shapely/243462#243462
+                do_they_overlap = np.invert(Polygon(self.to_artist().get_verts()).intersection(Polygon(Ellipse(xy = (ra_list[s],dec_list[s]),\
+                                                                            width = min_list[s]+separation,height = maj_list[s]+separation,angle = -pa_list[s]).get_verts())).is_empty)
+
+                maj_match[s]    = do_they_overlap
+
+
+        return np.where(maj_match)[0]
+
 
     def to_artist(self):
         '''
@@ -132,7 +156,7 @@ class Pointing:
 
         self.center = SkyCoord(float(header['CRVAL1'])*u.degree,
                                float(header['CRVAL2'])*u.degree)
-        dec_fov = abs(float(header['CDELT1']))*float(header['CRPIX1'])
+        dec_fov = abs(float(header['CDELT1']))*float(header['CRPIX1'])*2
         self.fov = dec_fov/np.cos(self.center.dec.rad) * u.degree
 
         try:
@@ -146,7 +170,7 @@ class Pointing:
         '''
         nvsstable = sc.getnvssdata(ra = [self.center.ra.to_string(u.hourangle, sep=' ')],
                                    dec = [self.center.dec.to_string(u.deg, sep=' ')],
-                                   offset = self.fov.to(u.arcsec))
+                                   offset = 0.5*self.fov.to(u.arcsec))
 
         if not nvsstable:
             sys.exit()
@@ -156,7 +180,9 @@ class Pointing:
 
         nvsstable['Maj'] = nvsstable['Maj'].to(u.deg)
         nvsstable['Min'] = nvsstable['Min'].to(u.deg)
-        nvsstable['RA'] = nvsstable['RA'].to(u.deg)
+        nvsstable['PA']  = nvsstable['PA']
+
+        nvsstable['RA']  = nvsstable['RA'].to(u.deg)
         nvsstable['DEC'] = nvsstable['DEC'].to(u.deg)
 
         nvsstable['Peak_flux'] /= 1e3 #convert to Jy
@@ -170,7 +196,7 @@ class Pointing:
         '''
         firsttable = sc.getfirstdata(ra = [self.center.ra.to_string(u.hourangle, sep=' ')],
                                      dec = [self.center.dec.to_string(u.deg, sep=' ')],
-                                     offset = self.fov.to(u.arcsec))
+                                     offset = 0.5*self.fov.to(u.arcsec))
 
         if not firsttable:
             sys.exit()
@@ -180,7 +206,8 @@ class Pointing:
 
         firsttable['Maj'] = firsttable['Maj'].to(u.deg)
         firsttable['Min'] = firsttable['Min'].to(u.deg)
-        firsttable['RA'] = firsttable['RA'].to(u.deg)
+        firsttable['PA']  = firsttable['PA']
+        firsttable['RA']  = firsttable['RA'].to(u.deg)
         firsttable['DEC'] = firsttable['DEC'].to(u.deg)
 
         firsttable['Peak_flux'] /= 1e3 #convert to Jy
@@ -199,13 +226,15 @@ class Pointing:
 
         sumsstable = sc.getsumssdata(ra = self.center.ra,
                                      dec = self.center.dec,
-                                     offset = self.fov)
+                                     offset = 0.5*self.fov)
 
         sumsstable['Maj'].unit = u.arcsec
         sumsstable['Min'].unit = u.arcsec
 
         sumsstable['Maj'] = sumsstable['Maj'].to(u.deg)
         sumsstable['Min'] = sumsstable['Min'].to(u.deg)
+        sumsstable['PA']  = sumsstable['PA']
+
         sumsstable['RA'] = sumsstable['RA'].to(u.deg)
         sumsstable['DEC'] = sumsstable['DEC'].to(u.deg)
 
@@ -222,7 +251,7 @@ def match_catalogs(pointing, ext):
 
     matches = []
     for source in ext.sources:
-        matches.append(source.match(pointing.cat['RA'], pointing.cat['DEC']))
+        matches.append(source.match(pointing.cat['RA'], pointing.cat['DEC'],pointing.cat['Maj'],pointing.cat['Min'],pointing.cat['PA']))
 
     return matches
 
@@ -255,10 +284,10 @@ def plot_catalog_match(pointing, ext, matches, plot, dpi):
         ell.set_facecolor('g')
         ell.set_alpha(0.5)
 
-    ax.set_xlim(pointing.center.ra.deg-pointing.fov.value,
-                pointing.center.ra.deg+pointing.fov.value)
-    ax.set_ylim(pointing.center.dec.deg-pointing.fov.value*np.cos(pointing.center.dec.rad),
-                pointing.center.dec.deg+pointing.fov.value*np.cos(pointing.center.dec.rad))
+    ax.set_xlim(pointing.center.ra.deg-0.5*pointing.fov.value,
+                pointing.center.ra.deg+0.5*pointing.fov.value)
+    ax.set_ylim(pointing.center.dec.deg-0.5*pointing.fov.value*np.cos(pointing.center.dec.rad),
+                pointing.center.dec.deg+0.5*pointing.fov.value*np.cos(pointing.center.dec.rad))
     ax.set_xlabel('RA (degrees)')
     ax.set_ylabel('DEC (degrees)')
 
@@ -287,7 +316,10 @@ def plot_astrometrics(pointing, ext, matches, astro, dpi):
     cmap = colors.ListedColormap(["navy", "crimson", "limegreen", "gold"])
     norm = colors.BoundaryNorm(np.arange(0.5, 5, 1), cmap.N)
 
-    fig, ax = plt.subplots()
+    fig = plt.figure(figsize=(15,15))
+    ax  = plt.subplot()
+    ax.axis('equal')
+
     sc = ax.scatter(dRA, dDEC, zorder=2,
                     marker='.', s=5,
                     c=n_matches, cmap=cmap, norm=norm)
@@ -319,13 +351,12 @@ def plot_astrometrics(pointing, ext, matches, astro, dpi):
 
     ymax_abs = abs(max(ax.get_ylim(), key=abs))
     xmax_abs = abs(max(ax.get_xlim(), key=abs))
-    
+
     # Equalise the axis to get no distortion of the beams
     xymax    = abs(max(xmax_abs,ymax_abs))
     xmax_abs = xymax
     ymax_abs = xymax
 
-    
     ax.set_ylim(ymin=-ymax_abs, ymax=ymax_abs)
     ax.set_xlim(xmin=-xmax_abs, xmax=xmax_abs)
 
@@ -553,6 +584,7 @@ def main():
         exit()
 
     matches = match_catalogs(pointing, ext_catalog)
+
     if plot:
         plot_catalog_match(pointing, ext_catalog, matches, plot, dpi)
     if astro:
