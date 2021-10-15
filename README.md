@@ -121,35 +121,44 @@ Matching can also be done with a local catalog. If the name of the other catalog
 
 ```
 usage: catalog_matching.py [-h] [-d DPI] [--astro [ASTRO]] [--flux [FLUX]]
-                           [--fluxtype FLUXTYPE] [--alpha ALPHA]
-                           [--output [OUTPUT]]
+                           [--plot [PLOT]] [--fluxtype FLUXTYPE]
+                           [--alpha ALPHA] [--output [OUTPUT]]
+                           [--annotate [ANNOTATE]]
                            pointing ext_cat
 
 positional arguments:
-  pointing             MeerKAT pointing catalog made by PyBDSF.
-  ext_cat              External catalog to match to, choice between NVSS,
-                       SUMMS, FIRST or a file. If the external catalog is a
-                       PyBDSF catalog, make sure the filename has 'bdsfcat' in
-                       it. If a different catalog, the parsets/extcat.json
-                       file must be used to specify its details (default
-                       NVSS).
+  pointing              Pointing catalog made by PyBDSF.
+  ext_cat               External catalog to match to, choice between NVSS,
+                        SUMMS, FIRST or a file. If the external catalog is a
+                        PyBDSF catalog, make sure the filename has 'bdsfcat'
+                        in it. If a different catalog, the parsets/extcat.json
+                        file must be used to specify its details (default
+                        NVSS).
 
 optional arguments:
-  -h, --help           show this help message and exit
-  -d DPI, --dpi DPI    DPI of the output images (default = 300).
-  --astro [ASTRO]      Plot the astrometric offset of the matches, optionally
-                       provide an output filename (default = don't plot
-                       astrometric offsets).
-  --flux [FLUX]        Plot the flux ratios of the matches, optionally provide
-                       an output filename (default = don't plot flux ratio).
-  --fluxtype FLUXTYPE  Whether to use Total or Peak flux for determining the
-                       flux ratio (default = Total).
-  --alpha ALPHA        The spectral slope to assume for calculating the flux
-                       ratio, where Flux_1 = Flux_2 * (freq_1/freq_2)^-alpha
-                       (default = 0.7)
-  --output [OUTPUT]    Output the result of the matching into a catalog,
-                       optionally provide an output filename (default = don't
-                       output a catalog).
+  -h, --help            show this help message and exit
+  -d DPI, --dpi DPI     DPI of the output images (default = 300).
+  --astro [ASTRO]       Plot the astrometric offset of the matches, optionally
+                        provide an output filename (default = don't plot
+                        astrometric offsets).
+  --flux [FLUX]         Plot the flux ratios of the matches, optionally
+                        provide an output filename (default = don't plot flux
+                        ratio).
+  --plot [PLOT]         Plot the field with the matched ellipses, optionally
+                        provide an output filename (default = don't plot the
+                        matched ellipses).
+  --fluxtype FLUXTYPE   Whether to use Total or Peak flux for determining the
+                        flux ratio (default = Total).
+  --alpha ALPHA         The spectral slope to assume for calculating the flux
+                        ratio, where Flux_1 = Flux_2 * (freq_1/freq_2)^-alpha
+                        (default = 0.8)
+  --output [OUTPUT]     Output the result of the matching into a catalog,
+                        optionally provide an output filename (default = don't
+                        output a catalog).
+  --annotate [ANNOTATE]
+                        Output the result of the matching into a kvis
+                        annotation file, optionally provide an output filename
+                        (default = don't output a catalog).
 ```
 
 ## catalog_analysis.py
