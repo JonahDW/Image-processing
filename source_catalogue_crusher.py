@@ -76,6 +76,8 @@ def main():
     parser.add_option('--DO_SELECT_SOURCE_TOTFLX_ISLANDFLX', dest='doselectonfluxdensity', type=float, default=0,
                       help='Select  sources on total flux density matching the total island flux density, input value is sigma or -sigma to exclude these sources')
 
+    parser.add_option('--DO_SELECT_SOURCE_ISLANDINDEX', dest='doselectonsimilarislandidx', type=float, default=0,
+                      help='Select sources with the same island index [=1], input value [=-1] to exclude these sources')
 
     parser.add_option('--DO_SELECT_ON', dest='doselecton',type=str, default='',
                       help='Set selection based on table column [e.g. Maj]')
@@ -132,13 +134,14 @@ def main():
     doprtcatainfo      = opts.doprtcatainfo
     doprtcatacols      = opts.doprtcatacol
     #
-    doselecttype              = opts.doselecttype
-    doselectextendedsources   = opts.doselectextendedsources
-    doselectsources_maj_decon = opts.doselectsources_maj_decon
-    doselectonfluxdensity     = opts.doselectonfluxdensity
-    doselecton                = opts.doselecton
-    doselectonvalue           = opts.doselectonvalue
-    doselectonoperation       = opts.doselectonoperation
+    doselecttype               = opts.doselecttype
+    doselectextendedsources    = opts.doselectextendedsources
+    doselectsources_maj_decon  = opts.doselectsources_maj_decon
+    doselectonfluxdensity      = opts.doselectonfluxdensity
+    doselecton                 = opts.doselecton
+    doselectonvalue            = opts.doselectonvalue
+    doselectonoperation        = opts.doselectonoperation
+    doselectonsimilarislandidx = opts.doselectonsimilarislandidx
     #
     # --------------------------------------------------------------------------
     # --------------------------------------------------------------------------
@@ -180,6 +183,8 @@ def main():
 
     # get the data
     catalog = hdul[1].data
+
+
 
     if doprtcatainfo:
 
@@ -365,10 +370,35 @@ def main():
 
     # ----
 
+
+    # Select sources with the same island index
+    #
+    if doselectonsimilarislandidx != 0:
+        #
+        island_selection = np.logical_and(np.zeros(len(data['Quality_flag'])).astype(dtype=bool),np.zeros(len(data['Quality_flag'])).astype(dtype=bool))
+        #
+        for isl in catalog['Isl_id']:
+            select_isl_idmatch = catalog['Isl_id'] == isl
+            if np.count_nonzero(select_isl_idmatch) > 1:
+                island_selection = np.logical_or(island_selection,select_isl_idmatch)
+
+
+        if doselectonsimilarislandidx > 0:
+            print('Source that have the same island index ',np.count_nonzero(island_selection))
+        else:
+            island_selection = np.invert(island_selection)
+            print('Source that have not the same island index ',np.count_nonzero(island_selection))
+
+    else:
+        island_selection = pre_select
+
+    # ----
+
+
     # Combine all preselection criteria
     #
     total_selection = np.logical_and(pre_select,pre_select)
-    selections     = [sel_inp,sel_s_code,sel_DC_point_source,sel_FIT_extended_source,sel_tot_flx]
+    selections      = [sel_inp,sel_s_code,sel_DC_point_source,sel_FIT_extended_source,sel_tot_flx,island_selection]
 
     for sels in selections:
         total_selection = np.logical_and(total_selection,sels)
