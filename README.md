@@ -87,6 +87,9 @@ Options:
                         Select  sources on total flux density matching the
                         total island flux density, input value is sigma or
                         -sigma to exclude these sources
+  --DO_SELECT_SOURCE_SAMEINDEX=DOSELECTONSAMEIDX
+                        Select sources with the same column index, if [-] in
+                        front of column name to exclude these sources
   --DO_SELECT_ON=DOSELECTON
                         Set selection based on table column [e.g. Maj]
   --DO_SELECT_OPERATION=DOSELECTONOPERATION
@@ -103,7 +106,9 @@ Options:
                         write table column output as ASCII to be edit by hand
   --TABLECOLUMNINPUT=TCOLUMNINFILENAME
                         read table column ASCII file.
-  --DO_PRINT_INFO       Print some statistics of the catalouge
+  --DO_PRINT_INFO=DOPRTCATAINFO
+                        =BASIC default, =FULL Print statistics of the
+                        catalouge
   --DO_PRINT_TAB_COLUMN
                         Print some information of the catalouge
 ```
