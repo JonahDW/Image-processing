@@ -84,7 +84,7 @@ def getsumssdata(ra,dec,offset):
                                                                alwayssign=True,
                                                                pad=True)) for coord in sumss_coordinates]
 
-        sumssids = Column(sumssids, name='SUMSS_id')
+        sumssids = Column(sumssids, name='Pointing_id_1')
         sumss_ra = Column(sumss_coordinates.ra, name='RA')
         sumss_dec = Column(sumss_coordinates.dec, name='DEC')
         sumsstable.add_columns([sumssids,sumss_ra,sumss_dec],
@@ -177,7 +177,7 @@ def getfirstdata(ra,dec,offset):
                                                                alwayssign=True,
                                                                pad=True)) for coord in first_coordinates]
 
-        firstids = Column(firstids, name='FIRST_id')
+        firstids = Column(firstids, name='Pointing_id_1')
         first_ra = Column(first_coordinates.ra, name='RA')
         first_dec = Column(first_coordinates.dec, name='DEC')
         table.add_columns([firstids,first_ra,first_dec],
@@ -291,7 +291,7 @@ def getnvssdata(ra,dec,offset):
     nvsstable['RA'] = nvss_coordinates.ra
     nvsstable['DEC'] = nvss_coordinates.dec
 
-    c = Column(nvssids, name='NVSS_id')
+    c = Column(nvssids, name='Pointing_id_1')
     nvsstable.add_column(c, index=0)
     nvsstable.remove_column('Distance')
 
