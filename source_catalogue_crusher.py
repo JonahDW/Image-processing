@@ -76,8 +76,8 @@ def main():
     parser.add_option('--DO_SELECT_SOURCE_TOTFLX_ISLANDFLX', dest='doselectonfluxdensity', type=float, default=0,
                       help='Select  sources on total flux density matching the total island flux density, input value is sigma or -sigma to exclude these sources')
 
-    parser.add_option('--DO_SELECT_SOURCE_ISLANDINDEX', dest='doselectonsimilarislandidx', type=float, default=0,
-                      help='Select sources with the same island index [=1], input value [=-1] to exclude these sources')
+    parser.add_option('--DO_SELECT_SOURCE_SAMEINDEX', dest='doselectonsameidx', type=str, default='',
+                      help='Select sources with the same column index, if [-] in front of column name to exclude these sources')
 
     parser.add_option('--DO_SELECT_ON', dest='doselecton',type=str, default='',
                       help='Set selection based on table column [e.g. Maj]')
@@ -103,8 +103,8 @@ def main():
     parser.add_option('--TABLECOLUMNINPUT', dest='tcolumninfilename', type=str,default='',
                       help='read table column ASCII file.')
 
-    parser.add_option('--DO_PRINT_INFO', dest='doprtcatainfo', action='store_true', default=False,
-                      help='Print some statistics of the catalouge')
+    parser.add_option('--DO_PRINT_INFO', dest='doprtcatainfo', type=str, default='BASIC',
+                      help='=BASIC default, =FULL Print statistics of the catalouge')
 
     parser.add_option('--DO_PRINT_TAB_COLUMN', dest='doprtcatacol', action='store_true', default=False,
                       help='Print some information of the catalouge')
@@ -141,7 +141,7 @@ def main():
     doselecton                 = opts.doselecton
     doselectonvalue            = opts.doselectonvalue
     doselectonoperation        = opts.doselectonoperation
-    doselectonsimilarislandidx = opts.doselectonsimilarislandidx
+    doselectonsameidx          = opts.doselectonsameidx
     #
     # --------------------------------------------------------------------------
     # --------------------------------------------------------------------------
@@ -184,11 +184,9 @@ def main():
     # get the data
     catalog = hdul[1].data
 
+    info ={}
 
-
-    if doprtcatainfo:
-
-        info ={}
+    if doprtcatainfo == 'BASIC' or doprtcatainfo == 'FULL':
 
         # determine preselection counts
         pre_excluded_sources = np.count_nonzero(np.invert(pre_select))
@@ -206,32 +204,35 @@ def main():
 
         info['pre_excluded_sources'] = pre_excluded_sources
 
-        # get stats
-        for mmdat in minmax_data:
-                info[mmdat] = {}
-                for getst in get_stats:
-                        info[mmdat][getst.__name__]=getst((catalog[mmdat])[pre_select])
+        if doprtcatainfo == 'FULL':
 
-        # determine the number of different types of sources
-        source_prop          = np.unique(list(catalog['S_Code']))
-        info['Source_types'] = source_prop 
-        for sp in source_prop:
-            sel_s_code    = catalog['S_Code'] == sp
-            sel_s_sources = np.logical_and(pre_select,sel_s_code)
-            #
-            info[sp] = {}
-            info[sp]['number_of_catalouged_sources'] = list((catalog['S_Code'])[sel_s_code]).count(sp)
-            # get stats of individual types
+            # get stats
             for mmdat in minmax_data:
-                    info[sp][mmdat] = {}
+                    info[mmdat] = {}
                     for getst in get_stats:
-                        info[sp][mmdat][getst.__name__] = getst(catalog[mmdat][sel_s_sources])
+                            info[mmdat][getst.__name__]=getst((catalog[mmdat])[pre_select])
+
+            # determine the number of different types of sources
+            source_prop          = np.unique(list(catalog['S_Code']))
+            info['Source_types'] = source_prop 
+            for sp in source_prop:
+                sel_s_code    = catalog['S_Code'] == sp
+                sel_s_sources = np.logical_and(pre_select,sel_s_code)
+                #
+                info[sp] = {}
+                info[sp]['number_of_catalouged_sources'] = list((catalog['S_Code'])[sel_s_code]).count(sp)
+                # get stats of individual types
+                for mmdat in minmax_data:
+                        info[sp][mmdat] = {}
+                        for getst in get_stats:
+                            info[sp][mmdat][getst.__name__] = getst(catalog[mmdat][sel_s_sources])
 
         print('\n=== Catalogue Information ===') 
         for k in info:
             print(k,' ',info[k])
 
-        sys.exit(-1)
+        if doprtcatainfo == 'FULL':
+            sys.exit(-1)
 
 
     # Read in and write out the Quality_flag of the table
@@ -333,15 +334,15 @@ def main():
     # Select extended sources based on Fiting error and deconvolved major axis
     #
     if doselectextendedsources != 0:
-        sigma_fitting            = abs(doselectextendedsources)
+        sigma_fitting            =  abs(doselectextendedsources)
         sour_fit_error           =  sigma_fitting * catalog['E_Maj'] + sigma_fitting * catalog['E_DC_Maj']
-        sel_FIT_extended_source  =  np.logical_and(catalog['Maj'] + sour_fit_error > catalog['DC_Maj'], catalog['DC_Maj'] != 0.0)
+        sel_FIT_extended_source  =  catalog['Maj']-catalog['DC_Maj'] > sour_fit_error
 
         if doselectextendedsources > 0:
-            print('Select extended sources based on MAJ fitting information',np.count_nonzero(sel_FIT_extended_source))
+            print('Select extended sources based on MAJ with respect to DC_MAJ fitting information',np.count_nonzero(sel_FIT_extended_source))
         else:
             sel_FIT_extended_source  = np.invert(sel_FIT_extended_source)
-            print('Select point sources based on MAJ fitting information',np.count_nonzero(sel_FIT_extended_source))
+            print('Select point sources based on MAJ with respect to DC_MAJ fitting information',np.count_nonzero(sel_FIT_extended_source))
         # ----
     else:
         sel_FIT_extended_source = pre_select
@@ -373,21 +374,26 @@ def main():
 
     # Select sources with the same island index
     #
-    if doselectonsimilarislandidx != 0:
+    if len(doselectonsameidx) > 0:
+        donotinverse  = 1
+        if doselectonsameidx.count('-') > 0:
+            donotinverse  = -1
+
+        doselectonsameidx = doselectonsameidx.replace('-','')
+
         #
         island_selection = np.logical_and(np.zeros(len(data['Quality_flag'])).astype(dtype=bool),np.zeros(len(data['Quality_flag'])).astype(dtype=bool))
         #
-        for isl in catalog['Isl_id']:
-            select_isl_idmatch = catalog['Isl_id'] == isl
+        for isl in catalog[doselectonsameidx]:
+            select_isl_idmatch = catalog[doselectonsameidx] == isl
             if np.count_nonzero(select_isl_idmatch) > 1:
                 island_selection = np.logical_or(island_selection,select_isl_idmatch)
 
-
-        if doselectonsimilarislandidx > 0:
-            print('Source that have the same island index ',np.count_nonzero(island_selection))
+        if donotinverse > 0:
+            print('Source that have the same ',doselectonsameidx,' index ',np.count_nonzero(island_selection))
         else:
             island_selection = np.invert(island_selection)
-            print('Source that have not the same island index ',np.count_nonzero(island_selection))
+            print('Source that have not the same ',doselectonsameidx,'index ',np.count_nonzero(island_selection))
 
     else:
         island_selection = pre_select
