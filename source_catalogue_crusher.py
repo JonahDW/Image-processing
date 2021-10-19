@@ -334,15 +334,15 @@ def main():
     # Select extended sources based on Fiting error and deconvolved major axis
     #
     if doselectextendedsources != 0:
-        sigma_fitting            = abs(doselectextendedsources)
+        sigma_fitting            =  abs(doselectextendedsources)
         sour_fit_error           =  sigma_fitting * catalog['E_Maj'] + sigma_fitting * catalog['E_DC_Maj']
-        sel_FIT_extended_source  =  np.logical_and(catalog['Maj'] + sour_fit_error > catalog['DC_Maj'], catalog['DC_Maj'] != 0.0)
+        sel_FIT_extended_source  =  catalog['Maj']-catalog['DC_Maj'] > sour_fit_error
 
         if doselectextendedsources > 0:
-            print('Select extended sources based on MAJ fitting information',np.count_nonzero(sel_FIT_extended_source))
+            print('Select extended sources based on MAJ with respect to DC_MAJ fitting information',np.count_nonzero(sel_FIT_extended_source))
         else:
             sel_FIT_extended_source  = np.invert(sel_FIT_extended_source)
-            print('Select point sources based on MAJ fitting information',np.count_nonzero(sel_FIT_extended_source))
+            print('Select point sources based on MAJ with respect to DC_MAJ fitting information',np.count_nonzero(sel_FIT_extended_source))
         # ----
     else:
         sel_FIT_extended_source = pre_select
