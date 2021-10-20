@@ -158,7 +158,9 @@ class Catalog:
 
         # Save diff number counts to pickle file
         data = S, dS, self.dN, solid_angle
-        helpers.pickle_to_file(data, os.path.join(self.dirname, self.cat_name+'_diff_counts.pkl'))
+        if not os.path.exists(os.path.join(self.dirname,'pickles')):
+            os.mkdir(os.path.join(self.dirname,'pickles'))
+        helpers.pickle_to_file(data, os.path.join(self.dirname, 'pickles', self.cat_name+'_diff_counts.pkl'))
 
         self.dN = self.dN/count_correction
         plt.errorbar(S, S**(5/2)*self.dN/dS/solid_angle,

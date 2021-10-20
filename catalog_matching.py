@@ -61,7 +61,6 @@ class SourceEllipse:
         # these are the source we do not need to check 
         # further, they always match
         min_match = sky_separation <= self.Min/2. + min_list + separation
-        
 
         # Check out the source between the maj_match and min_match boundaries
         #
@@ -316,7 +315,7 @@ def plot_astrometrics(pointing, ext, matches, astro, dpi):
     cmap = colors.ListedColormap(["navy", "crimson", "limegreen", "gold"])
     norm = colors.BoundaryNorm(np.arange(0.5, 5, 1), cmap.N)
 
-    fig = plt.figure(figsize=(15,15))
+    fig = plt.figure(figsize=(8,8))
     ax  = plt.subplot()
     ax.axis('equal')
 
@@ -370,7 +369,7 @@ def plot_astrometrics(pointing, ext, matches, astro, dpi):
     ax.axhline(np.median(dDEC)+np.std(dDEC),-ymax_abs,ymax_abs, color='grey', linestyle='dotted', zorder=1)
     ax.axhspan(np.median(dDEC)-np.std(dDEC),np.median(dDEC)+np.std(dDEC), alpha=0.2, color='grey')
     ax.annotate(f'dDEC = {np.median(dDEC):.2f}+-{np.std(dDEC):.2f}',
-                xy=(0.05,0.90), xycoords='axes fraction', fontsize=8)
+                xy=(0.05,0.925), xycoords='axes fraction', fontsize=8)
 
     # Determine mean and standard deviation of points in RA
     ax.axvline(np.median(dRA),-ymax_abs,ymax_abs, color='grey', linestyle='dashed', zorder=1)
@@ -378,7 +377,7 @@ def plot_astrometrics(pointing, ext, matches, astro, dpi):
     ax.axvline(np.median(dRA)+np.std(dRA),-ymax_abs,ymax_abs, color='grey', linestyle='dotted', zorder=1)
     ax.axvspan(np.median(dRA)-np.std(dRA),np.median(dRA)+np.std(dRA), alpha=0.2, color='grey')
     ax.annotate(f'dRA = {np.median(dRA):.2f}+-{np.std(dRA):.2f}',
-                xy=(0.05,0.85), xycoords='axes fraction', fontsize=8)
+                xy=(0.05,0.90), xycoords='axes fraction', fontsize=8)
 
     ax.set_title(f'Astrometric offset of {len(dRA)} sources')
     ax.set_xlabel('RA offset (arcsec)')
@@ -390,6 +389,12 @@ def plot_astrometrics(pointing, ext, matches, astro, dpi):
     else:
         plt.savefig(astro, dpi=dpi)
     plt.close()
+
+    # Save output to pickle file
+    if not os.path.exists(os.path.join(pointing.dirname,'pickles')):
+        os.mkdir(os.path.join(pointing.dirname,'pickles'))
+    pickle_out = os.path.join(pointing.dirname,'pickles',f'match_{ext.name}_{pointing.name}_astrometrics.pkl')
+    helpers.pickle_to_file((dRA, dDEC, n_matches), pickle_out)
 
 def plot_fluxes(pointing, ext, matches, fluxtype, flux, alpha, dpi):
     '''
@@ -450,6 +455,12 @@ def plot_fluxes(pointing, ext, matches, fluxtype, flux, alpha, dpi):
     else:
         plt.savefig(flux, dpi=dpi)
     plt.close()
+
+    # Save output to pickle file
+    if not os.path.exists(os.path.join(pointing.dirname,'pickles')):
+        os.mkdir(os.path.join(pointing.dirname,'pickles'))
+    pickle_out = os.path.join(pointing.dirname,'pickles',f'match_{ext.name}_{pointing.name}_fluxes.pkl')
+    helpers.pickle_to_file((int_flux, ext_flux_corrected, separation, n_matches), pickle_out)
 
 def write_to_kvis(pointing, ext, matches, annotate):
     '''
