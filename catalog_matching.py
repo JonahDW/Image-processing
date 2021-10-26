@@ -11,6 +11,7 @@ from argparse import ArgumentParser
 from astropy import units as u
 from astropy.table import Table, join
 from astropy.coordinates import SkyCoord
+import astropy.wcs as WCS
 
 import matplotlib
 matplotlib.use('Agg')
@@ -31,7 +32,8 @@ class SourceEllipse:
         self.DEC = catalog_entry[column_dict['dec']]
         self.Maj = catalog_entry[column_dict['majax']]
         self.Min = catalog_entry[column_dict['minax']]
-        self.PA = catalog_entry[column_dict['pa']]
+        self.PA  = catalog_entry[column_dict['pa']]
+
         if column_dict['peak_flux']:
             self.PeakFlux = catalog_entry[column_dict['peak_flux']]
         if column_dict['total_flux']:
@@ -39,7 +41,8 @@ class SourceEllipse:
 
         self.skycoord = SkyCoord(self.RA, self.DEC, unit='deg')
 
-    def match(self, ra_list, dec_list, maj_list, min_list, pa_list, separation = 0):
+
+    def match(self, ra_list, dec_list, maj_list, min_list, pa_list, sigma_extent, addsearchdistance,header):
         '''
         Match the ellipse with a (list of) source(s)
 
@@ -47,20 +50,40 @@ class SourceEllipse:
         ra_list -- Right ascension of sources
         dec_list -- Declination of sources
         separation (float) - Additional range in degrees
+
         '''
-        offset_coord = SkyCoord(ra_list, dec_list, unit='deg')
+
+        offset_coord   = SkyCoord(ra_list, dec_list, unit='deg')
 
         sky_separation = self.skycoord.separation(offset_coord) 
 
-        # Check if sources match within Bmaj boundaries
+
+        # this factor just increases the number of sources to check
+        # so no harm to th process
+        deprojection_factor = (np.sqrt( (self.RA - ra_list)**2 + (self.DEC - dec_list)**2 ) / sky_separation).value
+
+
+        # The Gaussians are given in FWHM Bmaj, Bmin
+        # in order to obtain a source extend we use the 3 sigma extend
+        #
+        # https://ned.ipac.caltech.edu/level5/Leo/Stats2_3.html
+        #
+        convert_factor_FWHM_to_sigma_extend = sigma_extent / (2*np.sqrt(2*np.log(2)))
+
+        # Check if sources match within Bmaj/2 boundaries
         # these source could match or not this needs to
         # be checked
-        maj_match = sky_separation < self.Maj/2. + maj_list + separation
+        #
+        # CAUTION: self is related to the external catalogue
+        #
+        maj_match = sky_separation < convert_factor_FWHM_to_sigma_extend * deprojection_factor * (self.Maj/2. + maj_list/2.) + addsearchdistance
 
-        # Check if sources match within Bmin boundaries
+        # Check if sources match within Bmin/2 boundaries
         # these are the source we do not need to check 
         # further, they always match
-        min_match = sky_separation <= self.Min/2. + min_list + separation
+        #
+        min_match = sky_separation <= convert_factor_FWHM_to_sigma_extend * (self.Min/2. + min_list/2.) + addsearchdistance
+        
 
         # Check out the source between the maj_match and min_match boundaries
         #
@@ -68,16 +91,23 @@ class SourceEllipse:
 
             msour_idx = np.where(np.logical_xor(min_match,maj_match))[0].flatten()
             
+
             for s in msour_idx:
 
+                check_source = Ellipse_skyprojection(self.RA,self.DEC,convert_factor_FWHM_to_sigma_extend*self.Maj,convert_factor_FWHM_to_sigma_extend*self.Min,self.PA,header)
+
+                to_sources   = Ellipse_skyprojection(ra_list[s],dec_list[s],convert_factor_FWHM_to_sigma_extend*maj_list[s]+addsearchdistance,convert_factor_FWHM_to_sigma_extend*min_list[s]+addsearchdistance,pa_list[s],header)
+
+
                 # this is a realy cool thing
-                # essentially use the matplotlib Ellipse convert it to vertices and to a Polygon use shpely to check if they intersect
+                # use vertices to a Polygon and shapely to check if they intersect
                 # https://gis.stackexchange.com/questions/243459/drawing-ellipse-with-shapely/243462#243462
-                do_they_overlap = np.invert(Polygon(self.to_artist().get_verts()).intersection(Polygon(Ellipse(xy = (ra_list[s],dec_list[s]),\
-                                                                            width = min_list[s]+separation,height = maj_list[s]+separation,angle = -pa_list[s]).get_verts())).is_empty)
 
+                do_they_overlap = np.invert(Polygon(check_source).intersection(Polygon(to_sources)).is_empty)
+
+                # adjust the matching of the major_matches and exclude sources 
+                #
                 maj_match[s]    = do_they_overlap
-
 
         return np.where(maj_match)[0]
 
@@ -85,6 +115,11 @@ class SourceEllipse:
     def to_artist(self):
         '''
         Convert the ellipse to a matplotlib artist
+
+        CAUTION definition in matplotlib is 
+        width is horizointal axis, height vertical axis, angle is anti-clockwise
+        in order to match the astronomical definition PA from North clockwise
+        height is major axis, width is minor axis and angle is -PA
         '''
         return Ellipse(xy = (self.RA, self.DEC),
                         width = self.Min,
@@ -103,10 +138,10 @@ class ExternalCatalog:
             self.sources = [SourceEllipse(source, columns) for source in self.cat]
             beam, freq = helpers.get_beam(name, center.ra.deg, center.dec.deg)
 
-            self.BMaj = beam[0]
-            self.BMin = beam[1]
-            self.BPA = beam[2]
-            self.freq = freq
+            self.BMaj  = beam[0]
+            self.BMin  = beam[1]
+            self.BPA   = beam[2]
+            self.freq  = freq
         else:
             path = Path(__file__).parent / 'parsets/extcat.json'
             with open(path) as f:
@@ -139,6 +174,9 @@ class Pointing:
 
         # Parse meta
         header = catalog.meta
+
+        # HRK
+        self.header = catalog.meta
 
         self.telescope = header['SF_TELE'].replace("'","")
         self.BMaj = float(header['SF_BMAJ'])*3600 #arcsec
@@ -242,7 +280,7 @@ class Pointing:
 
         return sumsstable
 
-def match_catalogs(pointing, ext):
+def match_catalogs(pointing, ext,sigma_extent,addsearchdistance):
     '''
     Match the sources of the chosen external catalog to the sources in the pointing
     '''
@@ -250,7 +288,7 @@ def match_catalogs(pointing, ext):
 
     matches = []
     for source in ext.sources:
-        matches.append(source.match(pointing.cat['RA'], pointing.cat['DEC'],pointing.cat['Maj'],pointing.cat['Min'],pointing.cat['PA']))
+        matches.append(source.match(pointing.cat['RA'], pointing.cat['DEC'],pointing.cat['Maj'],pointing.cat['Min'],pointing.cat['PA'],sigma_extent,addsearchdistance,make_header(pointing.header)))
 
     return matches
 
@@ -315,7 +353,7 @@ def plot_astrometrics(pointing, ext, matches, astro, dpi):
     cmap = colors.ListedColormap(["navy", "crimson", "limegreen", "gold"])
     norm = colors.BoundaryNorm(np.arange(0.5, 5, 1), cmap.N)
 
-    fig = plt.figure(figsize=(8,8))
+    fig = plt.figure(figsize=(15,15))
     ax  = plt.subplot()
     ax.axis('equal')
 
@@ -369,7 +407,7 @@ def plot_astrometrics(pointing, ext, matches, astro, dpi):
     ax.axhline(np.median(dDEC)+np.std(dDEC),-ymax_abs,ymax_abs, color='grey', linestyle='dotted', zorder=1)
     ax.axhspan(np.median(dDEC)-np.std(dDEC),np.median(dDEC)+np.std(dDEC), alpha=0.2, color='grey')
     ax.annotate(f'dDEC = {np.median(dDEC):.2f}+-{np.std(dDEC):.2f}',
-                xy=(0.05,0.925), xycoords='axes fraction', fontsize=8)
+                xy=(0.05,0.90), xycoords='axes fraction', fontsize=8)
 
     # Determine mean and standard deviation of points in RA
     ax.axvline(np.median(dRA),-ymax_abs,ymax_abs, color='grey', linestyle='dashed', zorder=1)
@@ -377,7 +415,7 @@ def plot_astrometrics(pointing, ext, matches, astro, dpi):
     ax.axvline(np.median(dRA)+np.std(dRA),-ymax_abs,ymax_abs, color='grey', linestyle='dotted', zorder=1)
     ax.axvspan(np.median(dRA)-np.std(dRA),np.median(dRA)+np.std(dRA), alpha=0.2, color='grey')
     ax.annotate(f'dRA = {np.median(dRA):.2f}+-{np.std(dRA):.2f}',
-                xy=(0.05,0.90), xycoords='axes fraction', fontsize=8)
+                xy=(0.05,0.85), xycoords='axes fraction', fontsize=8)
 
     ax.set_title(f'Astrometric offset of {len(dRA)} sources')
     ax.set_xlabel('RA offset (arcsec)')
@@ -389,12 +427,6 @@ def plot_astrometrics(pointing, ext, matches, astro, dpi):
     else:
         plt.savefig(astro, dpi=dpi)
     plt.close()
-
-    # Save output to pickle file
-    if not os.path.exists(os.path.join(pointing.dirname,'pickles')):
-        os.mkdir(os.path.join(pointing.dirname,'pickles'))
-    pickle_out = os.path.join(pointing.dirname,'pickles',f'match_{ext.name}_{pointing.name}_astrometrics.pkl')
-    helpers.pickle_to_file((dRA, dDEC, n_matches), pickle_out)
 
 def plot_fluxes(pointing, ext, matches, fluxtype, flux, alpha, dpi):
     '''
@@ -456,38 +488,42 @@ def plot_fluxes(pointing, ext, matches, fluxtype, flux, alpha, dpi):
         plt.savefig(flux, dpi=dpi)
     plt.close()
 
-    # Save output to pickle file
-    if not os.path.exists(os.path.join(pointing.dirname,'pickles')):
-        os.mkdir(os.path.join(pointing.dirname,'pickles'))
-    pickle_out = os.path.join(pointing.dirname,'pickles',f'match_{ext.name}_{pointing.name}_fluxes.pkl')
-    helpers.pickle_to_file((int_flux, ext_flux_corrected, separation, n_matches), pickle_out)
-
-def write_to_kvis(pointing, ext, matches, annotate):
+def write_to_kvis(pointing, ext, matches, annotate, annotate_nonmatchedcat,sigma_extent):
     '''
     Write the results to a kvis annotation file
+
+    CAUTION: KVIS uses the semimajor and semiminor axes for the Ellipse
+             Bmaj, Bmin FWHM needs to be divided by a factor of 2
+
     '''
+
+    # here define the source sizes and match to the semiminor and semimajor axis
+    convert_factor_FWHM_to_sigma_extend  = sigma_extent / (2*np.sqrt(2*np.log(2)))
+    FWHMtosemimajmin_factor              = 0.5  * convert_factor_FWHM_to_sigma_extend
+
+
     match_ext_lines = []
     match_int_lines = []
     non_match_ext_lines = []
     for i, match in enumerate(matches):
         if len(match) > 0:
             source = ext.sources[i]
-            toprt = f'ELLIPSE {source.RA:.6f} {source.DEC:.6f} {source.Maj/2:.6f} {source.Min/2:.6f} {source.PA:.4f} \n'
+            toprt = f'ELLIPSE {source.RA:.6f} {source.DEC:.6f} {source.Maj*FWHMtosemimajmin_factor:.6f} {source.Min*FWHMtosemimajmin_factor:.6f} {source.PA:.4f} \n'
             match_ext_lines.append(toprt)
             for ind in match:
                 source = pointing.sources[ind]
-                toprt = f'ELLIPSE {source.RA:.6f} {source.DEC:.6f} {source.Maj/2:.6f} {source.Min/2:.6f} {source.PA:.4f} \n'
+                toprt = f'ELLIPSE {source.RA:.6f} {source.DEC:.6f} {source.Maj*FWHMtosemimajmin_factor:.6f} {source.Min*FWHMtosemimajmin_factor:.6f} {source.PA:.4f} \n'
                 match_int_lines.append(toprt)
         else:
             source = ext.sources[i]
-            toprt = f'ELLIPSE {source.RA:.6f} {source.DEC:.6f} {source.Maj/2:.6f} {source.Min/2:.6f} {source.PA:.4f} \n'
+            toprt = f'ELLIPSE {source.RA:.6f} {source.DEC:.6f} {source.Maj*FWHMtosemimajmin_factor:.6f} {source.Min*FWHMtosemimajmin_factor:.6f} {source.PA:.4f} \n'
             non_match_ext_lines.append(toprt)
 
     non_matches = np.setdiff1d(np.arange(len(pointing.sources)), np.concatenate(matches).ravel())
     non_match_int_lines = []
     for i in non_matches:
         source = pointing.sources[i]
-        toprt = f'ELLIPSE {source.RA:.6f} {source.DEC:.6f} {source.Maj/2:.6f} {source.Min/2:.6f} {source.PA:.4f} \n'
+        toprt = f'ELLIPSE {source.RA:.6f} {source.DEC:.6f} {source.Maj*FWHMtosemimajmin_factor:.6f} {source.Min*FWHMtosemimajmin_factor:.6f} {source.PA:.4f} \n'
         non_match_int_lines.append(toprt)
 
     if annotate is True:
@@ -517,18 +553,20 @@ def write_to_kvis(pointing, ext, matches, annotate):
     kvisfile.writelines('COLOR RED\n')
     for line in match_int_lines:
         kvisfile.writelines(line)
-    kvisfile.writelines('# Non matched sources from external catalog\n')
-    kvisfile.writelines('# \n')
-    kvisfile.writelines('COLOR WHITE\n')
-    '''
-    for line in non_match_ext_lines:
-        kvisfile.writelines(line)
-    kvisfile.writelines('# Non matched sources from internal catalog\n')
-    kvisfile.writelines('# \n')
-    kvisfile.writelines('COLOR GREEN\n')
-    for line in non_match_int_lines:
-        kvisfile.writelines(line)
-    '''
+
+    if annotate_nonmatchedcat:
+
+        kvisfile.writelines('# Non matched sources from external catalog\n')
+        kvisfile.writelines('# \n')
+        kvisfile.writelines('COLOR WHITE\n')
+        for line in non_match_ext_lines:
+            kvisfile.writelines(line)
+
+        kvisfile.writelines('# Non matched sources from internal catalog\n')
+        kvisfile.writelines('# \n')
+        kvisfile.writelines('COLOR GREEN\n')
+        for line in non_match_int_lines:
+            kvisfile.writelines(line)
 
     kvisfile.close()
 
@@ -551,6 +589,73 @@ def write_to_catalog(pointing, ext, matches, output):
     else:
         out.write(output, overwrite=True, format='fits')
 
+def make_header(catheader):
+    """
+    generates a header structure for WCS 
+    to work with
+    """
+
+    wcsheader  = { 'NAXIS'  : 2,                                       # number of axis 
+                'NAXIS1' : float(catheader['AXIS1']),                  # number of elements along the axis (e.g. number of pixel)
+                'CTYPE1' : str(catheader['CTYPE1']).replace('\'',''),  # axis type
+                'CRVAL1' : float(catheader['CRVAL1']),                 # Coordinate value at reference
+                'CRPIX1' : float(catheader['CRPIX1']),                 # pixel value at reference
+                'CUNIT1' : str(catheader['CUNIT1']).replace('\'',''),  # axis unit
+                'CDELT1' : float(catheader['CDELT1']),                 # coordinate increment
+
+                'NAXIS2' : float(catheader['AXIS2']),                  # number of elements along the axis (e.g. number of pixel)
+                'CTYPE2' : str(catheader['CTYPE2']).replace('\'',''),  # axis type
+                'CRVAL2' : float(catheader['CRVAL2']),                 # Coordinate value at reference
+                'CRPIX2' : float(catheader['CRPIX2']),                 # pixel value at reference
+                'CUNIT2' : str(catheader['CUNIT2']).replace('\'',''),  # axis unit
+                'CDELT2' : float(catheader['CDELT2']),                 # coordinate increment
+         }
+
+    return wcsheader
+
+
+def Ellipse_skyprojection(ra,dec,Bmaj,Bmin,PA,header=None):
+    """
+    Provide real pixel values for deprojected Ellipse in
+    tha tangent plane
+
+    CAUTION definition in matplotlib is 
+    width is horizointal axis, height vertical axis, angle is anti-clockwise
+    in order to match the astronomical definition PA from North clockwise
+    height is major axis, width is minor axis and angle is -PA
+    """
+
+    if header != None:
+
+        wcs = WCS.WCS(header)
+
+        source_centre_position = SkyCoord(ra*u.deg,dec*u.deg, frame='icrs')
+
+        source_centre_position_pix_xy = list(np.array(WCS.utils.skycoord_to_pixel(source_centre_position,wcs)).flatten())
+
+        # calculate the Ellipse in pixels
+        # 
+        degtopix = abs(1/header['CDELT1'])
+
+        # CAUTION the IMAGE has a reverse sense of RA so if the 
+        # increment is negative we need to compensate 
+        #
+        PA_sense = -1
+        if header['CDELT1'] < 0:
+            PA_sense = 1
+
+        Ellipse_tangent_plane_pix = Ellipse(source_centre_position_pix_xy,height=degtopix*Bmaj,width=degtopix*Bmin,angle=PA_sense*PA).get_verts()
+        Ellipse_Sky_deg           = WCS.utils.pixel_to_skycoord(Ellipse_tangent_plane_pix[:,0],Ellipse_tangent_plane_pix[:,1],wcs)
+        Ellipse_Sky_deg_reshaped  = np.column_stack((Ellipse_Sky_deg.ra.deg,Ellipse_Sky_deg.dec.deg))
+        Ellipse_SKY               = Ellipse_Sky_deg_reshaped 
+
+    else:
+        Ellipse_SKY = Ellipse([ra,dec],height=Bmaj,width=Bmin,angle=-PA).get_verts()
+        
+    return Ellipse_SKY
+
+
+
 def main():
 
     parser = new_argument_parser()
@@ -567,6 +672,10 @@ def main():
     alpha = args.alpha
     output = args.output
     annotate = args.annotate
+    annotate_nonmatchedcat = args.annotate_nonmatchedcat
+
+    sigma_extent      = args.match_sigma_extend
+    addsearchdistance = args.addsearchdistance
 
     pointing_cat = Table.read(pointing)
     pointing = Pointing(pointing_cat, pointing)
@@ -594,7 +703,7 @@ def main():
         print('No sources were found to match, most likely the external catalog has no coverage here')
         exit()
 
-    matches = match_catalogs(pointing, ext_catalog)
+    matches = match_catalogs(pointing, ext_catalog,sigma_extent,addsearchdistance)
 
     if plot:
         plot_catalog_match(pointing, ext_catalog, matches, plot, dpi)
@@ -604,8 +713,8 @@ def main():
         plot_fluxes(pointing, ext_catalog, matches, fluxtype, flux, alpha, dpi)
     if output:
         write_to_catalog(pointing, ext_catalog, matches, output)
-    if annotate:
-        write_to_kvis(pointing, ext_catalog, matches, annotate)
+    if annotate: 
+        write_to_kvis(pointing, ext_catalog, matches, annotate,annotate_nonmatchedcat,sigma_extent)
 
 def new_argument_parser():
 
@@ -637,7 +746,7 @@ def new_argument_parser():
     parser.add_argument("--fluxtype", default="Total",
                         help="""Whether to use Total or Peak flux for determining
                                 the flux ratio (default = Total).""")
-    parser.add_argument("--alpha", default=0.8,
+    parser.add_argument("--alpha", default=0.8,type=float,
                         help="""The spectral slope to assume for calculating the
                                 flux ratio, where Flux_1 = Flux_2 * (freq_1/freq_2)^-alpha
                                 (default = 0.8)""")
@@ -649,6 +758,17 @@ def new_argument_parser():
                         help="""Output the result of the matching into a kvis
                                 annotation file, optionally provide an output filename
                                 (default = don't output a catalog).""")
+    parser.add_argument("--annotate_nonmatchedcat", action='store_true',default=False,
+                        help="""Annotation file will include the non-macthed catalouge sources 
+                                (default = don't show).""")
+
+    parser.add_argument("--addsearchdistance", default=0,type=float,
+                        help="""increase the search distance for matching default = 0 deg""")
+
+    parser.add_argument("--match_sigma_extend", default=3,type=float,
+                        help="""use sigma to increase the source extend, 3 sigma would be 1.27398 times the FWHM""")
+
+
     return parser
 
 if __name__ == '__main__':
