@@ -1,10 +1,12 @@
 #!/usr/bin/env python
 
+import gc
 import os
 import sys
 import numpy as np
 
 import json
+from numpyencoder import NumpyEncoder
 from pathlib import Path
 from argparse import ArgumentParser
 
@@ -24,6 +26,8 @@ from shapely.geometry import Polygon
 
 import searchcats as sc
 import helpers
+
+gc.enable()
 
 class SourceEllipse:
 
@@ -53,9 +57,12 @@ class SourceEllipse:
         offset_coord   = SkyCoord(ra_list, dec_list, unit='deg')
         sky_separation = self.skycoord.separation(offset_coord) 
 
-        # This factor just increases the number of sources to check
-        # so no harm to th process
-        deprojection_factor = (np.sqrt( (self.RA - ra_list)**2 + (self.DEC - dec_list)**2 ) / sky_separation).value
+        # this factor just increases the number of sources to check
+        # so no harm to the process
+        # is of the order of sub-arcsec
+        #
+        dra, ddec           = self.skycoord.spherical_offsets_to(offset_coord)
+        deprojection_factor = (np.sqrt( (dra)**2 + (ddec)**2 ) / sky_separation).value
 
         # The Gaussians are given in FWHM Bmaj, Bmin
         # in order to obtain a source extend we use the 3 sigma extent
@@ -76,7 +83,7 @@ class SourceEllipse:
         # these are the source we do not need to check 
         # further, they always match
         #
-        min_match = sky_separation <= FWHM_to_sigma_extent * (self.Min/2. + min_list/2.) + search_dist
+        min_match = sky_separation <= FWHM_to_sigma_extent * (self.Min/2. + min_list/2.)
 
         # Check out the source between the maj_match and min_match boundaries
         #
@@ -94,15 +101,42 @@ class SourceEllipse:
                                                      FWHM_to_sigma_extent*min_list[s]+search_dist,
                                                      pa_list[s], header)
 
-                # this is a realy cool thing
-                # use vertices to a Polygon and shapely to check if they intersect
-                # https://gis.stackexchange.com/questions/243459/drawing-ellipse-with-shapely/243462#243462
+                # this is to check if sources are crossing the 360 deg in RA
+                #
+                ra_check_s       = abs(np.diff(check_source[:,0])) > 300
+                ra_check_s_where = np.where(ra_check_s)[0]
 
-                do_they_overlap = np.invert(Polygon(check_source).intersection(Polygon(to_sources)).is_empty)
+                ra_to_s       = abs(np.diff(to_sources[:,0])) > 300
+                ra_to_s_where = np.where(ra_to_s)[0]
+
+                if max(ra_check_s_where.shape) > 0 or max(ra_to_s_where.shape) > 0:
+
+                    do_they_overlap = False
+                    split_check_s_source  = Ellipse_RA_check(check_source)
+                    split_to_s_sources    = Ellipse_RA_check(to_sources)
+
+                    for a in range(len(split_check_s_source)):
+                        for b in range(len(split_to_s_sources)):
+                            do_they_overlap_split = np.invert(Polygon(split_check_s_source[a]).intersection(Polygon(split_to_s_sources[b])).is_empty)
+                            if do_they_overlap_split == True:
+                                do_they_overlap = True
+                            #
+                            del do_they_overlap_split
+                            gc.collect()
+
+                else:
+                    # this is a realy cool thing
+                    # use vertices to a Polygon and shapely to check if they intersect
+                    # https://gis.stackexchange.com/questions/243459/drawing-ellipse-with-shapely/243462#243462
+                    do_they_overlap = np.invert(Polygon(check_source).intersection(Polygon(to_sources)).is_empty)
+                    #
 
                 # adjust the matching of the major_matches and exclude sources 
                 #
                 maj_match[s]    = do_they_overlap
+
+                del do_they_overlap,check_source,to_sources
+                gc.collect()
 
         return np.where(maj_match)[0]
 
@@ -290,6 +324,115 @@ def match_catalogs(pointing, ext, sigma_extent, search_dist):
 
     return matches
 
+def info_match(pointing, ext, matches, fluxtype, alpha, output):
+    """
+    Provide information of the matches
+    """
+
+    match_info = {}
+
+    dDEC      = []
+    dRA       = []
+    n_matches = []
+    
+    for i, match in enumerate(matches):
+        if len(match) > 0:
+            for m in match:
+                # determine the offset
+                dra, ddec = ext.sources[i].skycoord.spherical_offsets_to(pointing.sources[m].skycoord)
+                dRA.append(dra.arcsec)
+                dDEC.append(ddec.arcsec)
+                # determine the fluxes
+                n_matches.append(len(match))
+    
+    match_info['offset'] = {}
+    match_info['offset']['dRA']       = np.array(dRA)
+    match_info['offset']['dDEC']      = np.array(dDEC)
+    match_info['offset']['n_matches'] = n_matches
+
+    stats_data     = ['dRA','dDEC']
+    get_stats      = [np.min,np.max,np.std,np.mean,np.median,len]
+    #
+    matching_class = list(np.unique(n_matches))
+    matching_class.append('Full')
+
+    match_info['offset']['stats'] = {}
+    # get stats
+    for mmdat in stats_data:
+        match_info['offset']['stats'][mmdat]={}
+        for cl in matching_class:
+            match_info['offset']['stats'][mmdat][str(cl)] = {}
+
+            if cl == 'Full':
+                stats_select = np.ones(len(n_matches)).astype(dtype=bool)
+            else:
+                stats_select = match_info['offset']['n_matches'] == cl
+
+            for getst in get_stats:            
+                match_info['offset']['stats'][mmdat][str(cl)][getst.__name__] = getst((match_info['offset'][mmdat][stats_select]))
+
+    match_info['fluxes'] = {}
+
+    ext_flux    = []
+    int_flux    = []
+    separation  = []
+    n_matches  = []
+    if fluxtype == 'Total':
+        for i, match in enumerate(matches):
+            if len(match) > 0:
+                ext_flux.append(ext.sources[i].IntFlux)
+                int_flux.append(np.sum([pointing.sources[m].IntFlux for m in match]))
+                source_coord = SkyCoord(ext.sources[i].RA, ext.sources[i].DEC, unit='deg')
+                separation.append(source_coord.separation(pointing.center).deg)
+                n_matches.append(len(match))
+    elif fluxtype == 'Peak':
+        for i, match in enumerate(matches):
+            if len(match) > 0:
+                ext_flux.append(ext.sources[i].PeakFlux)
+                int_flux.append(np.sum([pointing.sources[m].PeakFlux for m in match]))
+                source_coord = SkyCoord(ext.sources[i].RA, ext.sources[i].DEC, unit='deg')
+                separation.append(source_coord.separation(pointing.center).deg)
+                n_matches.append(len(match))
+    else:
+        print(f'Invalid fluxtype {fluxtype}, choose between Total or Peak flux')
+        sys.exit()
+
+    match_info['fluxes'][fluxtype] = {}
+    match_info['fluxes'][fluxtype]['ext_flux']   = ext_flux
+    match_info['fluxes'][fluxtype]['int_flux']   = int_flux
+    match_info['fluxes'][fluxtype]['separation'] = separation
+    match_info['fluxes'][fluxtype]['n_matches']  = n_matches
+
+    # Scale flux density to proper frequency
+    ext_flux_corrected = np.array(ext_flux) * (pointing.freq/ext.freq)**-alpha
+    dFlux = np.array(int_flux)/ext_flux_corrected
+
+    match_info['fluxes'][fluxtype]['alpha'] = alpha
+    match_info['fluxes'][fluxtype]['dFlux'] = dFlux
+
+    stats_data     = ['dFlux']
+    get_stats      = [np.min,np.max,np.std,np.mean,np.median,len]
+    #
+    matching_class = list(np.unique(n_matches))
+    matching_class.append('Full')
+
+    match_info['fluxes']['stats'] = {}
+    # get stats
+    for mmdat in stats_data:
+        match_info['fluxes']['stats'][mmdat]={}
+        for cl in matching_class:
+            match_info['fluxes']['stats'][mmdat][str(cl)] = {}
+
+            if cl == 'Full':
+                stats_select = np.ones(len(n_matches)).astype(dtype=bool)
+            else:
+                stats_select = match_info['fluxes'][fluxtype]['n_matches'] == cl
+
+            for getst in get_stats:            
+                match_info['fluxes']['stats'][mmdat][str(cl)][getst.__name__] = getst((match_info['fluxes'][fluxtype][mmdat][stats_select]))
+
+    return match_info
+
 def plot_catalog_match(pointing, ext, matches, plot, dpi):
     '''
     Plot the field with all the matches in it as ellipses
@@ -371,6 +514,7 @@ def plot_astrometrics(pointing, ext, matches, astro, dpi):
     ext_beam_ell = Ellipse(xy=(0,0),
                            width=ext.BMin,
                            height=ext.BMaj,
+                           angle=-ext.BPA,
                            facecolor='none',
                            edgecolor='b',
                            linestyle='dashed',
@@ -378,9 +522,11 @@ def plot_astrometrics(pointing, ext, matches, astro, dpi):
     int_beam_ell = Ellipse(xy=(0,0),
                            width=pointing.BMin,
                            height=pointing.BMaj,
+                           angle=-pointing.BPA,
                            facecolor='none',
                            edgecolor='k',
                            label=f'{pointing.telescope} beam')
+
     ax.add_patch(ext_beam_ell)
     ax.add_patch(int_beam_ell)
 
@@ -399,7 +545,7 @@ def plot_astrometrics(pointing, ext, matches, astro, dpi):
     ax.axvline(0,-ymax_abs,ymax_abs, color='k', zorder=1)
 
     ax.annotate('Median offsets', xy=(0.05,0.95), xycoords='axes fraction', fontsize=8)
-    # Determine mean and standard deviation of points RA
+    # Determine mean and standard deviation of points Dec
     ax.axhline(np.median(dDEC),-xmax_abs,xmax_abs, color='grey', linestyle='dashed', zorder=1)
     ax.axhline(np.median(dDEC)-np.std(dDEC),-xmax_abs,xmax_abs, color='grey', linestyle='dotted', zorder=1)
     ax.axhline(np.median(dDEC)+np.std(dDEC),-ymax_abs,ymax_abs, color='grey', linestyle='dotted', zorder=1)
@@ -415,6 +561,15 @@ def plot_astrometrics(pointing, ext, matches, astro, dpi):
     ax.annotate(f'dRA = {np.median(dRA):.2f}+-{np.std(dRA):.2f}',
                 xy=(0.05,0.90), xycoords='axes fraction', fontsize=8)
 
+    n_match_array = np.array(n_matches)
+    dRA_array     = np.array(dRA)
+    sel_single_match = n_match_array == 1.0
+    # HRK
+    #print(n_match_array[sel_single_match])
+    #print(np.median(dRA_array[sel_single_match]))
+    #print(np.std(dRA_array[sel_single_match]))
+    #print(len(n_match_array[sel_single_match]))
+
     ax.set_title(f'Astrometric offset of {len(dRA)} sources')
     ax.set_xlabel('RA offset (arcsec)')
     ax.set_ylabel('DEC offset (arcsec)')
@@ -425,12 +580,6 @@ def plot_astrometrics(pointing, ext, matches, astro, dpi):
     else:
         plt.savefig(astro, dpi=dpi)
     plt.close()
-
-    # Save output to pickle file
-    if not os.path.exists(os.path.join(pointing.dirname,'pickles')):
-        os.mkdir(os.path.join(pointing.dirname,'pickles'))
-    pickle_out = os.path.join(pointing.dirname,'pickles',f'match_{ext.name}_{pointing.name}_astrometrics.pkl')
-    helpers.pickle_to_file((dRA, dDEC, n_matches), pickle_out)
 
 def plot_fluxes(pointing, ext, matches, fluxtype, flux, alpha, dpi):
     '''
@@ -491,12 +640,6 @@ def plot_fluxes(pointing, ext, matches, fluxtype, flux, alpha, dpi):
     else:
         plt.savefig(flux, dpi=dpi)
     plt.close()
-
-    # Save output to pickle file
-    if not os.path.exists(os.path.join(pointing.dirname,'pickles')):
-        os.mkdir(os.path.join(pointing.dirname,'pickles'))
-    pickle_out = os.path.join(pointing.dirname,'pickles',f'match_{ext.name}_{pointing.name}_fluxes.pkl')
-    helpers.pickle_to_file((int_flux, ext_flux_corrected, separation, n_matches), pickle_out)
 
 def write_to_kvis(pointing, ext, matches, annotate, annotate_nonmatchedcat,sigma_extent):
     '''
@@ -596,6 +739,30 @@ def write_to_catalog(pointing, ext, matches, output):
     else:
         out.write(output, overwrite=True, format='fits')
 
+
+def write_info(pointing, ext, match_info, output):
+    """
+    Write the information into a json file
+    """
+
+    filename = os.path.join(pointing.dirname, f'match_{ext.name}_{pointing.name}_info.json')
+
+    # Write JSON file
+    with open(filename, 'w') as outfile:
+            json.dump(match_info,outfile,
+                                indent=4, sort_keys=True,
+                                separators=(',', ': '), ensure_ascii=False,cls=NumpyEncoder)
+
+    # here just print out the single source astrometry
+    # for the full and single matches
+    with open(filename, 'r') as json_file:
+        matchinfofile = json.load(json_file)
+        print('FULL-DEC ',matchinfofile['offset']['stats']['dDEC']['Full'])
+        print('FULL-RA ',matchinfofile['offset']['stats']['dRA']['Full'])
+        print('Single-DEC ',matchinfofile['offset']['stats']['dDEC']['1'])
+        print('Single-RA ',matchinfofile['offset']['stats']['dRA']['1'])
+        print('FLUX MATCHES ',matchinfofile['fluxes']['stats'])
+
 def make_header(catheader):
     """
     generates a header structure for WCS 
@@ -664,6 +831,50 @@ def Ellipse_skyprojection(ra, dec, Bmaj, Bmin, PA, header=None):
 
     return Ellipse_SKY
 
+def Ellipse_RA_check(radec):
+    """
+    split the polygons into sub-polygons to be checked
+    """
+    new_polygons = []
+
+    # check sources if they go over 360 degrees
+    ra_check       = abs(np.diff(radec[:,0])) > 300
+    ra_check_where = np.where(ra_check)[0].flatten()
+
+    selit          = np.ones(len(radec)).astype('bool')
+
+    if len(ra_check_where) == 2:
+        # ellipse crosses twice the RA border
+        selit[ra_check_where[0]+1:ra_check_where[1]+1] = False
+
+        radec_list_1 = radec[selit].tolist()
+
+        if radec_list_1[0] == radec_list_1[-1]:
+            new_polygons.append(radec_list_1)
+        else:
+            radec_list_1.append(radec_list_1[0])
+            new_polygons.append(radec_list_1)
+
+        radec_list_2 = radec[np.invert(selit)].tolist()
+        if radec_list_2[0] == radec_list_2[-1]:
+            new_polygons.append(radec_list_2)
+        else:
+            radec_list_2.append(radec_list_2[0])
+            new_polygons.append(radec_list_2)
+
+    elif len(ra_check_where) == 1:
+        # ellipse crosses once the RA border
+        selit[ra_check_where[0]+1] = False
+        new_polygons.append(radec[selit].tolist())
+    elif len(ra_check_where) == 0:
+        # ellipse crosses never the RA border
+        new_polygons.append(radec)
+    else:
+        print('strange polygon',radec)
+        sys.exit(-1)
+
+    return new_polygons
+
 def main():
 
     parser = new_argument_parser()
@@ -711,7 +922,13 @@ def main():
         print('No sources were found to match, most likely the external catalog has no coverage here')
         exit()
 
-    matches = match_catalogs(pointing, ext_catalog,sigma_extent,search_dist)
+    matches      = match_catalogs(pointing, ext_catalog, sigma_extent, search_dist)
+    matches_info = info_match(pointing, ext_catalog, matches, fluxtype, alpha, output)
+
+    matches_info['INPUT'] = {}
+    matches_info['INPUT']['alpha'] = alpha 
+    matches_info['INPUT']['match_sigma_extend'] = sigma_extent 
+    matches_info['INPUT']['search_dist'] = search_dist
 
     if plot:
         plot_catalog_match(pointing, ext_catalog, matches, plot, dpi)
@@ -721,8 +938,10 @@ def main():
         plot_fluxes(pointing, ext_catalog, matches, fluxtype, flux, alpha, dpi)
     if output:
         write_to_catalog(pointing, ext_catalog, matches, output)
+        write_info(pointing,ext_catalog,matches_info,output)
+
     if annotate: 
-        write_to_kvis(pointing, ext_catalog, matches, annotate,annotate_nonmatchedcat,sigma_extent)
+        write_to_kvis(pointing, ext_catalog, matches, annotate, annotate_nonmatchedcat, sigma_extent)
 
 def new_argument_parser():
 
