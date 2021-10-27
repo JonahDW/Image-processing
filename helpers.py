@@ -1,3 +1,9 @@
+from astropy.coordinates import SkyCoord
+from astropy import units as u
+import astropy.wcs as WCS
+
+from matplotlib.patches import Ellipse
+
 from pathlib import Path
 import numpy as np
 import pickle
@@ -50,6 +56,29 @@ def flux_correction(center_dist, freq, dfreq, alpha):
     correction = np.array(total_flux)/np.array(attenuation)
 
     return correction
+
+def make_header(catheader):
+    """
+    generates a header structure for WCS 
+    to work with
+    """
+    wcsheader  = { 'NAXIS'  : 2,                                       # number of axis 
+                'NAXIS1' : float(catheader['AXIS1']),                  # number of elements along the axis (e.g. number of pixel)
+                'CTYPE1' : str(catheader['CTYPE1']).replace('\'',''),  # axis type
+                'CRVAL1' : float(catheader['CRVAL1']),                 # Coordinate value at reference
+                'CRPIX1' : float(catheader['CRPIX1']),                 # pixel value at reference
+                'CUNIT1' : str(catheader['CUNIT1']).replace('\'',''),  # axis unit
+                'CDELT1' : float(catheader['CDELT1']),                 # coordinate increment
+
+                'NAXIS2' : float(catheader['AXIS2']),                  # number of elements along the axis (e.g. number of pixel)
+                'CTYPE2' : str(catheader['CTYPE2']).replace('\'',''),  # axis type
+                'CRVAL2' : float(catheader['CRVAL2']),                 # Coordinate value at reference
+                'CRPIX2' : float(catheader['CRPIX2']),                 # pixel value at reference
+                'CUNIT2' : str(catheader['CUNIT2']).replace('\'',''),  # axis unit
+                'CDELT2' : float(catheader['CDELT2']),                 # coordinate increment
+         }
+
+    return wcsheader
 
 def get_beam(identity, ra_center, dec_center):
     '''
@@ -122,3 +151,92 @@ def measure_image_regions(pixel_regions, image, weight_image=None):
             err_values.append(np.ma.masked)
 
     return values, err_values
+
+def ellipse_skyprojection(ra, dec, Bmaj, Bmin, PA, header=None):
+    """
+    Provide real pixel values for deprojected Ellipse in
+    tha tangent plane
+
+    CAUTION: Definition of an ellipse in matplotlib is 
+    width horizontal axis, height vertical axis, angle is anti-clockwise
+    in order to match the astronomical definition PA from North clockwise
+    height is major axis, width is minor axis and angle is -PA
+    """
+    if header != None:
+        wcs = WCS.WCS(header)
+        source_centre_position = SkyCoord(ra*u.deg,dec*u.deg, frame='icrs')
+        source_centre_position_pix_xy = list(np.array(WCS.utils.skycoord_to_pixel(source_centre_position,wcs)).flatten())
+
+        # calculate the Ellipse in pixels
+        # 
+        degtopix = abs(1/header['CDELT1'])
+
+        # CAUTION: the IMAGE has a reverse sense of RA so if the 
+        # increment is negative we need to compensate 
+        #
+        PA_sense = -1
+        if header['CDELT1'] < 0:
+            PA_sense = 1
+
+        Ellipse_tangent_plane_pix = Ellipse(source_centre_position_pix_xy,
+                                            height=degtopix*Bmaj,
+                                            width=degtopix*Bmin,
+                                            angle=PA_sense*PA).get_verts()
+        Ellipse_Sky_deg           = WCS.utils.pixel_to_skycoord(Ellipse_tangent_plane_pix[:,0],
+                                                                Ellipse_tangent_plane_pix[:,1],
+                                                                wcs)
+        Ellipse_Sky_deg_reshaped  = np.column_stack((Ellipse_Sky_deg.ra.deg,
+                                                     Ellipse_Sky_deg.dec.deg))
+        Ellipse_SKY               = Ellipse_Sky_deg_reshaped 
+
+    else:
+        Ellipse_SKY = Ellipse([ra,dec],
+                              height=Bmaj,
+                              width=Bmin,
+                              angle=-PA).get_verts()
+
+    return Ellipse_SKY
+
+def ellipse_RA_check(radec):
+    """
+    Split the polygons into sub-polygons to be checked
+    """
+    new_polygons = []
+
+    # check sources if they go over 360 degrees
+    ra_check       = abs(np.diff(radec[:,0])) > 300
+    ra_check_where = np.where(ra_check)[0].flatten()
+
+    selit          = np.ones(len(radec)).astype('bool')
+
+    if len(ra_check_where) == 2:
+        # ellipse crosses twice the RA border
+        selit[ra_check_where[0]+1:ra_check_where[1]+1] = False
+
+        radec_list_1 = radec[selit].tolist()
+
+        if radec_list_1[0] == radec_list_1[-1]:
+            new_polygons.append(radec_list_1)
+        else:
+            radec_list_1.append(radec_list_1[0])
+            new_polygons.append(radec_list_1)
+
+        radec_list_2 = radec[np.invert(selit)].tolist()
+        if radec_list_2[0] == radec_list_2[-1]:
+            new_polygons.append(radec_list_2)
+        else:
+            radec_list_2.append(radec_list_2[0])
+            new_polygons.append(radec_list_2)
+
+    elif len(ra_check_where) == 1:
+        # ellipse crosses once the RA border
+        selit[ra_check_where[0]+1] = False
+        new_polygons.append(radec[selit].tolist())
+    elif len(ra_check_where) == 0:
+        # ellipse crosses never the RA border
+        new_polygons.append(radec)
+    else:
+        print('strange polygon',radec)
+        sys.exit(-1)
+
+    return new_polygons

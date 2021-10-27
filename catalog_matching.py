@@ -13,7 +13,6 @@ from argparse import ArgumentParser
 from astropy import units as u
 from astropy.table import Table, join
 from astropy.coordinates import SkyCoord
-import astropy.wcs as WCS
 
 import matplotlib
 matplotlib.use('Agg')
@@ -91,12 +90,12 @@ class SourceEllipse:
 
             msource_idx = np.where(np.logical_xor(min_match,maj_match))[0].flatten()
             for s in msource_idx:
-                check_source = Ellipse_skyprojection(self.RA,self.DEC,
+                check_source = helpers.ellipse_skyprojection(self.RA,self.DEC,
                                                      FWHM_to_sigma_extent*self.Maj,
                                                      FWHM_to_sigma_extent*self.Min,
                                                      self.PA, header)
 
-                to_sources   = Ellipse_skyprojection(ra_list[s],dec_list[s],
+                to_sources   = helpers.ellipse_skyprojection(ra_list[s],dec_list[s],
                                                      FWHM_to_sigma_extent*maj_list[s]+search_dist,
                                                      FWHM_to_sigma_extent*min_list[s]+search_dist,
                                                      pa_list[s], header)
@@ -112,8 +111,8 @@ class SourceEllipse:
                 if max(ra_check_s_where.shape) > 0 or max(ra_to_s_where.shape) > 0:
 
                     do_they_overlap = False
-                    split_check_s_source  = Ellipse_RA_check(check_source)
-                    split_to_s_sources    = Ellipse_RA_check(to_sources)
+                    split_check_s_source  = helpers.ellipse_RA_check(check_source)
+                    split_to_s_sources    = helpers.ellipse_RA_check(to_sources)
 
                     for a in range(len(split_check_s_source)):
                         for b in range(len(split_to_s_sources)):
@@ -184,7 +183,7 @@ class ExternalCatalog:
             self.sources = [SourceEllipse(source, cat_info['data_columns']) for source in self.cat]
             self.BMaj = cat_info['properties']['BMAJ']
             self.BMin = cat_info['properties']['BMIN']
-            self.BPA = cat_info['properties']['BPA']
+            self.BPA  = cat_info['properties']['BPA']
             self.freq = cat_info['properties']['freq']
 
 class Pointing:
@@ -320,7 +319,7 @@ def match_catalogs(pointing, ext, sigma_extent, search_dist):
                                     pointing.cat['Maj'],pointing.cat['Min'],
                                     pointing.cat['PA'],
                                     sigma_extent, search_dist,
-                                    make_header(pointing.header)))
+                                    helpers.make_header(pointing.header)))
 
     return matches
 
@@ -328,23 +327,22 @@ def info_match(pointing, ext, matches, fluxtype, alpha, output):
     """
     Provide information of the matches
     """
-
     match_info = {}
 
     dDEC      = []
     dRA       = []
     n_matches = []
-    
+
     for i, match in enumerate(matches):
         if len(match) > 0:
             for m in match:
-                # determine the offset
+                # Determine the offset
                 dra, ddec = ext.sources[i].skycoord.spherical_offsets_to(pointing.sources[m].skycoord)
                 dRA.append(dra.arcsec)
                 dDEC.append(ddec.arcsec)
-                # determine the fluxes
+                # Determine the matches
                 n_matches.append(len(match))
-    
+
     match_info['offset'] = {}
     match_info['offset']['dRA']       = np.array(dRA)
     match_info['offset']['dDEC']      = np.array(dDEC)
@@ -368,7 +366,7 @@ def info_match(pointing, ext, matches, fluxtype, alpha, output):
             else:
                 stats_select = match_info['offset']['n_matches'] == cl
 
-            for getst in get_stats:            
+            for getst in get_stats:
                 match_info['offset']['stats'][mmdat][str(cl)][getst.__name__] = getst((match_info['offset'][mmdat][stats_select]))
 
     match_info['fluxes'] = {}
@@ -428,7 +426,7 @@ def info_match(pointing, ext, matches, fluxtype, alpha, output):
             else:
                 stats_select = match_info['fluxes'][fluxtype]['n_matches'] == cl
 
-            for getst in get_stats:            
+            for getst in get_stats:
                 match_info['fluxes']['stats'][mmdat][str(cl)][getst.__name__] = getst((match_info['fluxes'][fluxtype][mmdat][stats_select]))
 
     return match_info
@@ -476,21 +474,10 @@ def plot_catalog_match(pointing, ext, matches, plot, dpi):
 
     plt.close()
 
-def plot_astrometrics(pointing, ext, matches, astro, dpi):
+def plot_astrometrics(match_info, pointing, ext, astro, dpi):
     '''
     Plot astrometric offsets of sources to the reference catalog
     '''
-    dDEC = []
-    dRA = []
-    n_matches = []
-    for i, match in enumerate(matches):
-        if len(match) > 0:
-            for m in match:
-                dra, ddec = ext.sources[i].skycoord.spherical_offsets_to(pointing.sources[m].skycoord)
-                dRA.append(dra.arcsec)
-                dDEC.append(ddec.arcsec)
-                n_matches.append(len(match))
-
     cmap = colors.ListedColormap(["navy", "crimson", "limegreen", "gold"])
     norm = colors.BoundaryNorm(np.arange(0.5, 5, 1), cmap.N)
 
@@ -498,9 +485,9 @@ def plot_astrometrics(pointing, ext, matches, astro, dpi):
     ax  = plt.subplot()
     ax.axis('equal')
 
-    sc = ax.scatter(dRA, dDEC, zorder=2,
+    sc = ax.scatter(match_info['offset']['dRA'], match_info['offset']['dDEC'], zorder=2,
                     marker='.', s=5,
-                    c=n_matches, cmap=cmap, norm=norm)
+                    c=match_info['offset']['n_matches'], cmap=cmap, norm=norm)
 
     # Add colorbar to set matches
     divider = make_axes_locatable(ax)
@@ -546,31 +533,24 @@ def plot_astrometrics(pointing, ext, matches, astro, dpi):
 
     ax.annotate('Median offsets', xy=(0.05,0.95), xycoords='axes fraction', fontsize=8)
     # Determine mean and standard deviation of points Dec
-    ax.axhline(np.median(dDEC),-xmax_abs,xmax_abs, color='grey', linestyle='dashed', zorder=1)
-    ax.axhline(np.median(dDEC)-np.std(dDEC),-xmax_abs,xmax_abs, color='grey', linestyle='dotted', zorder=1)
-    ax.axhline(np.median(dDEC)+np.std(dDEC),-ymax_abs,ymax_abs, color='grey', linestyle='dotted', zorder=1)
-    ax.axhspan(np.median(dDEC)-np.std(dDEC),np.median(dDEC)+np.std(dDEC), alpha=0.2, color='grey')
-    ax.annotate(f'dDEC = {np.median(dDEC):.2f}+-{np.std(dDEC):.2f}',
+    dDEC_stats = match_info['offset']['stats']['dDEC']['Full']
+    ax.axhline(dDEC_stats['median'],-xmax_abs,xmax_abs, color='grey', linestyle='dashed', zorder=1)
+    ax.axhline(dDEC_stats['median']-dDEC_stats['std'],-xmax_abs,xmax_abs, color='grey', linestyle='dotted', zorder=1)
+    ax.axhline(dDEC_stats['median']+dDEC_stats['std'],-ymax_abs,ymax_abs, color='grey', linestyle='dotted', zorder=1)
+    ax.axhspan(dDEC_stats['median']-dDEC_stats['std'],dDEC_stats['median']+dDEC_stats['std'], alpha=0.2, color='grey')
+    ax.annotate(f"dDEC = {dDEC_stats['median']:.2f}+-{dDEC_stats['std']:.2f}",
                 xy=(0.05,0.925), xycoords='axes fraction', fontsize=8)
 
     # Determine mean and standard deviation of points in RA
-    ax.axvline(np.median(dRA),-ymax_abs,ymax_abs, color='grey', linestyle='dashed', zorder=1)
-    ax.axvline(np.median(dRA)-np.std(dRA),-xmax_abs,xmax_abs, color='grey', linestyle='dotted', zorder=1)
-    ax.axvline(np.median(dRA)+np.std(dRA),-ymax_abs,ymax_abs, color='grey', linestyle='dotted', zorder=1)
-    ax.axvspan(np.median(dRA)-np.std(dRA),np.median(dRA)+np.std(dRA), alpha=0.2, color='grey')
-    ax.annotate(f'dRA = {np.median(dRA):.2f}+-{np.std(dRA):.2f}',
+    dRA_stats = match_info['offset']['stats']['dRA']['Full']
+    ax.axvline(dRA_stats['median'],-ymax_abs,ymax_abs, color='grey', linestyle='dashed', zorder=1)
+    ax.axvline(dRA_stats['median']-dRA_stats['std'],-xmax_abs,xmax_abs, color='grey', linestyle='dotted', zorder=1)
+    ax.axvline(dRA_stats['median']+dRA_stats['std'],-ymax_abs,ymax_abs, color='grey', linestyle='dotted', zorder=1)
+    ax.axvspan(dRA_stats['median']-dRA_stats['std'],dRA_stats['median']+dRA_stats['std'], alpha=0.2, color='grey')
+    ax.annotate(f"dRA = {dRA_stats['median']:.2f}+-{dRA_stats['std']:.2f}",
                 xy=(0.05,0.90), xycoords='axes fraction', fontsize=8)
 
-    n_match_array = np.array(n_matches)
-    dRA_array     = np.array(dRA)
-    sel_single_match = n_match_array == 1.0
-    # HRK
-    #print(n_match_array[sel_single_match])
-    #print(np.median(dRA_array[sel_single_match]))
-    #print(np.std(dRA_array[sel_single_match]))
-    #print(len(n_match_array[sel_single_match]))
-
-    ax.set_title(f'Astrometric offset of {len(dRA)} sources')
+    ax.set_title(f"Astrometric offset of {len(match_info['offset']['dRA'])} sources")
     ax.set_xlabel('RA offset (arcsec)')
     ax.set_ylabel('DEC offset (arcsec)')
     ax.legend(loc='upper right')
@@ -581,45 +561,20 @@ def plot_astrometrics(pointing, ext, matches, astro, dpi):
         plt.savefig(astro, dpi=dpi)
     plt.close()
 
-def plot_fluxes(pointing, ext, matches, fluxtype, flux, alpha, dpi):
+def plot_fluxes(match_info, pointing, ext, fluxtype, flux, dpi):
     '''
     Plot flux offsets of sources to the reference catalog
     '''
-    ext_flux = []
-    int_flux = []
-    separation = []
-    n_matches = []
-    if fluxtype == 'Total':
-        for i, match in enumerate(matches):
-            if len(match) > 0:
-                ext_flux.append(ext.sources[i].IntFlux)
-                int_flux.append(np.sum([pointing.sources[m].IntFlux for m in match]))
-                source_coord = SkyCoord(ext.sources[i].RA, ext.sources[i].DEC, unit='deg')
-                separation.append(source_coord.separation(pointing.center).deg)
-                n_matches.append(len(match))
-    elif fluxtype == 'Peak':
-        for i, match in enumerate(matches):
-            if len(match) > 0:
-                ext_flux.append(ext.sources[i].PeakFlux)
-                int_flux.append(np.sum([pointing.sources[m].PeakFlux for m in match]))
-                source_coord = SkyCoord(ext.sources[i].RA, ext.sources[i].DEC, unit='deg')
-                separation.append(source_coord.separation(pointing.center).deg)
-                n_matches.append(len(match))
-    else:
-        print(f'Invalid fluxtype {fluxtype}, choose between Total or Peak flux')
-        sys.exit()
-
-    # Scale flux density to proper frequency
-    ext_flux_corrected = np.array(ext_flux) * (pointing.freq/ext.freq)**-alpha
-    dFlux = np.array(int_flux)/ext_flux_corrected
+    flux_matches = match_info['fluxes'][fluxtype]
 
     cmap = colors.ListedColormap(["navy", "crimson", "limegreen", "gold"])
     norm = colors.BoundaryNorm(np.arange(0.5, 5, 1), cmap.N)
 
     fig, ax = plt.subplots()
-    sc = ax.scatter(separation, dFlux,
+    sc = ax.scatter(flux_matches['separation'], 
+                    flux_matches['dFlux'],
                     marker='.', s=5,
-                    c=n_matches, cmap=cmap, norm=norm)
+                    c=flux_matches['n_matches'], cmap=cmap, norm=norm)
 
     # Add colorbar to set matches
     divider = make_axes_locatable(ax)
@@ -630,7 +585,7 @@ def plot_fluxes(pointing, ext, matches, fluxtype, flux, alpha, dpi):
     cax.set_yticklabels(['1','2','3','>3'])
     cax.set_title('Matches')
 
-    ax.set_title(f'Flux ratio of {len(dFlux)} sources')
+    ax.set_title(f"Flux ratio of {len(flux_matches['dFlux'])} sources")
     ax.set_xlabel('Distance from pointing center (degrees)')
     ax.set_ylabel(f'Flux ratio ({fluxtype} flux)')
     ax.set_yscale('log')
@@ -641,7 +596,7 @@ def plot_fluxes(pointing, ext, matches, fluxtype, flux, alpha, dpi):
         plt.savefig(flux, dpi=dpi)
     plt.close()
 
-def write_to_kvis(pointing, ext, matches, annotate, annotate_nonmatchedcat,sigma_extent):
+def write_to_kvis(pointing, ext, matches, annotate, annotate_nonmatchedcat, sigma_extent):
     '''
     Write the results to a kvis annotation file
 
@@ -739,141 +694,19 @@ def write_to_catalog(pointing, ext, matches, output):
     else:
         out.write(output, overwrite=True, format='fits')
 
-
 def write_info(pointing, ext, match_info, output):
     """
     Write the information into a json file
     """
-
     filename = os.path.join(pointing.dirname, f'match_{ext.name}_{pointing.name}_info.json')
 
     # Write JSON file
     with open(filename, 'w') as outfile:
             json.dump(match_info,outfile,
-                                indent=4, sort_keys=True,
-                                separators=(',', ': '), ensure_ascii=False,cls=NumpyEncoder)
-
-    # here just print out the single source astrometry
-    # for the full and single matches
-    with open(filename, 'r') as json_file:
-        matchinfofile = json.load(json_file)
-        print('FULL-DEC ',matchinfofile['offset']['stats']['dDEC']['Full'])
-        print('FULL-RA ',matchinfofile['offset']['stats']['dRA']['Full'])
-        print('Single-DEC ',matchinfofile['offset']['stats']['dDEC']['1'])
-        print('Single-RA ',matchinfofile['offset']['stats']['dRA']['1'])
-        print('FLUX MATCHES ',matchinfofile['fluxes']['stats'])
-
-def make_header(catheader):
-    """
-    generates a header structure for WCS 
-    to work with
-    """
-    wcsheader  = { 'NAXIS'  : 2,                                       # number of axis 
-                'NAXIS1' : float(catheader['AXIS1']),                  # number of elements along the axis (e.g. number of pixel)
-                'CTYPE1' : str(catheader['CTYPE1']).replace('\'',''),  # axis type
-                'CRVAL1' : float(catheader['CRVAL1']),                 # Coordinate value at reference
-                'CRPIX1' : float(catheader['CRPIX1']),                 # pixel value at reference
-                'CUNIT1' : str(catheader['CUNIT1']).replace('\'',''),  # axis unit
-                'CDELT1' : float(catheader['CDELT1']),                 # coordinate increment
-
-                'NAXIS2' : float(catheader['AXIS2']),                  # number of elements along the axis (e.g. number of pixel)
-                'CTYPE2' : str(catheader['CTYPE2']).replace('\'',''),  # axis type
-                'CRVAL2' : float(catheader['CRVAL2']),                 # Coordinate value at reference
-                'CRPIX2' : float(catheader['CRPIX2']),                 # pixel value at reference
-                'CUNIT2' : str(catheader['CUNIT2']).replace('\'',''),  # axis unit
-                'CDELT2' : float(catheader['CDELT2']),                 # coordinate increment
-         }
-
-    return wcsheader
-
-def Ellipse_skyprojection(ra, dec, Bmaj, Bmin, PA, header=None):
-    """
-    Provide real pixel values for deprojected Ellipse in
-    tha tangent plane
-
-    CAUTION: Definition of an ellipse in matplotlib is 
-    width horizontal axis, height vertical axis, angle is anti-clockwise
-    in order to match the astronomical definition PA from North clockwise
-    height is major axis, width is minor axis and angle is -PA
-    """
-    if header != None:
-        wcs = WCS.WCS(header)
-        source_centre_position = SkyCoord(ra*u.deg,dec*u.deg, frame='icrs')
-        source_centre_position_pix_xy = list(np.array(WCS.utils.skycoord_to_pixel(source_centre_position,wcs)).flatten())
-
-        # calculate the Ellipse in pixels
-        # 
-        degtopix = abs(1/header['CDELT1'])
-
-        # CAUTION: the IMAGE has a reverse sense of RA so if the 
-        # increment is negative we need to compensate 
-        #
-        PA_sense = -1
-        if header['CDELT1'] < 0:
-            PA_sense = 1
-
-        Ellipse_tangent_plane_pix = Ellipse(source_centre_position_pix_xy,
-                                            height=degtopix*Bmaj,
-                                            width=degtopix*Bmin,
-                                            angle=PA_sense*PA).get_verts()
-        Ellipse_Sky_deg           = WCS.utils.pixel_to_skycoord(Ellipse_tangent_plane_pix[:,0],
-                                                                Ellipse_tangent_plane_pix[:,1],
-                                                                wcs)
-        Ellipse_Sky_deg_reshaped  = np.column_stack((Ellipse_Sky_deg.ra.deg,
-                                                     Ellipse_Sky_deg.dec.deg))
-        Ellipse_SKY               = Ellipse_Sky_deg_reshaped 
-
-    else:
-        Ellipse_SKY = Ellipse([ra,dec],
-                              height=Bmaj,
-                              width=Bmin,
-                              angle=-PA).get_verts()
-
-    return Ellipse_SKY
-
-def Ellipse_RA_check(radec):
-    """
-    split the polygons into sub-polygons to be checked
-    """
-    new_polygons = []
-
-    # check sources if they go over 360 degrees
-    ra_check       = abs(np.diff(radec[:,0])) > 300
-    ra_check_where = np.where(ra_check)[0].flatten()
-
-    selit          = np.ones(len(radec)).astype('bool')
-
-    if len(ra_check_where) == 2:
-        # ellipse crosses twice the RA border
-        selit[ra_check_where[0]+1:ra_check_where[1]+1] = False
-
-        radec_list_1 = radec[selit].tolist()
-
-        if radec_list_1[0] == radec_list_1[-1]:
-            new_polygons.append(radec_list_1)
-        else:
-            radec_list_1.append(radec_list_1[0])
-            new_polygons.append(radec_list_1)
-
-        radec_list_2 = radec[np.invert(selit)].tolist()
-        if radec_list_2[0] == radec_list_2[-1]:
-            new_polygons.append(radec_list_2)
-        else:
-            radec_list_2.append(radec_list_2[0])
-            new_polygons.append(radec_list_2)
-
-    elif len(ra_check_where) == 1:
-        # ellipse crosses once the RA border
-        selit[ra_check_where[0]+1] = False
-        new_polygons.append(radec[selit].tolist())
-    elif len(ra_check_where) == 0:
-        # ellipse crosses never the RA border
-        new_polygons.append(radec)
-    else:
-        print('strange polygon',radec)
-        sys.exit(-1)
-
-    return new_polygons
+                      indent=4, sort_keys=True,
+                      separators=(',', ': '),
+                      ensure_ascii=False,
+                      cls=NumpyEncoder)
 
 def main():
 
@@ -933,12 +766,12 @@ def main():
     if plot:
         plot_catalog_match(pointing, ext_catalog, matches, plot, dpi)
     if astro:
-        plot_astrometrics(pointing, ext_catalog, matches, astro, dpi)
+        plot_astrometrics(matches_info, pointing, ext_catalog, astro, dpi)
     if flux:
-        plot_fluxes(pointing, ext_catalog, matches, fluxtype, flux, alpha, dpi)
+        plot_fluxes(matches_info, pointing, ext_catalog, fluxtype, flux, dpi)
     if output:
         write_to_catalog(pointing, ext_catalog, matches, output)
-        write_info(pointing,ext_catalog,matches_info,output)
+        write_info(pointing, ext_catalog, matches_info, output)
 
     if annotate: 
         write_to_kvis(pointing, ext_catalog, matches, annotate, annotate_nonmatchedcat, sigma_extent)
