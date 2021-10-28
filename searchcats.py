@@ -225,8 +225,8 @@ def getnvssdata(ra,dec,offset):
         col_names (list) -- Names of the NVSS columns
         '''
 
-        col_starts = [0,12,24,30,37,43,49,55,59,64,71,81,89]
-        col_ends = [11,23,29,36,42,48,54,58,63,70,79,87,95]
+        col_starts = [0,12,24,29,37,43,49,55,59,64,71,81,89]
+        col_ends = [11,23,28,36,42,48,54,58,63,70,79,87,95]
 
         nvssparams = urllib.parse.urlencode({'Equinox': 3,
                                              'DecFit': sizes,
