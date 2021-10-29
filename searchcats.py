@@ -241,7 +241,6 @@ def getnvssdata(ra,dec,offset):
         nvssdata=filternvssfile(nvssfiturldata)
 
         if not nvssdata:
-            print("No NVSS data available.")
             return None
 
         nvsstable = ascii.read(nvssdata,
@@ -270,6 +269,10 @@ def getnvssdata(ra,dec,offset):
     nvssdctable = get_table(0, nvss_dc_columns)
     nvssfittable = get_table(1, nvss_fit_columns)
 
+    if nvssdctable is None and nvssfittable is None:
+        print("No NVSS data available.")
+        sys.exit()
+
     nvsstable = join(nvssdctable,
                      nvssfittable,
                      keys=['RA','DEC','Distance','Field','YPix','XPix'],
@@ -293,6 +296,5 @@ def getnvssdata(ra,dec,offset):
 
     c = Column(nvssids, name='Source_name')
     nvsstable.add_column(c, index=0)
-    nvsstable.remove_column('Distance')
 
     return nvsstable
