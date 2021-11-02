@@ -175,7 +175,9 @@ Analyze a PyBDSF catalog with different metrics regularly applied to radio astro
 Runs the catalog analysis on `myimage_catalog.fits` and produces plots for the number counts, resolved fraction, and differential number counts. The rms image given is used to correct the differential number counts for area coverage.
 
 ```
-usage: catalog_analysis.py [-h] [-r RMS_IMAGE] [-c COMP_CORR] [-d DPI] catalog
+usage: catalog_analysis.py [-h] [-r RMS_IMAGE] [-c COMP_CORR]
+                           [--stacked_catalog] [--fancy] [-d DPI]
+                           catalog
 
 positional arguments:
   catalog               Pointing catalog(s) made by PyBDSF.
@@ -191,6 +193,9 @@ optional arguments:
                         fractions for correcting differential number counts.
                         the file is assumed to contain at least the arrays of
                         flux bins, completeness fraction.
+  --stacked_catalog     Indicate if catalog is built up from multiple
+                        catalogs, for example with combine_catalogs script.
+  --fancy               Output plots with latex font and formatting.
   -d DPI, --dpi DPI     DPI of the output images (default = 300).
 ```
 

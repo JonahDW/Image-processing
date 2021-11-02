@@ -66,7 +66,7 @@ def getsumssdata(ra,dec,offset):
         min_ra_idx = None
         max_ra_idx = None
 
-        # Iterate through list, account for 
+        # Iterate through list, cycle as the RA=0 can go through the field
         for i, line in cycle(enumerate(sumssfile)):
             if int(line[0:2]) >= min_ra.hms[0] and int(line[3:5]) >= min_ra.hms[1] and min_ra_idx is None:
                 min_ra_idx = i
