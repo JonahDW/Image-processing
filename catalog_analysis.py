@@ -23,14 +23,9 @@ from scipy.interpolate import UnivariateSpline, interp1d
 
 import helpers
 
-plt.rc('font', **{'family': 'serif', 'serif': ['Computer Modern']})
-plt.rc('text', usetex=True)
-
-plt.rcParams.update({'font.size': 14})
-
 class Catalog:
 
-    def __init__(self, catalog_file):
+    def __init__(self, catalog_file, stacked_cat):
         self.dirname = os.path.dirname(catalog_file)
         self.cat_name = os.path.basename(catalog_file).split('.')[0]
         print(f'Reading in catalog: {self.cat_name}')
@@ -39,25 +34,23 @@ class Catalog:
 
         # Parse meta
         header = self.table.meta
-        if len(header['OBJECT'].split(',')) > 1:
-            self.obj_name = header['OBJECT'].split(',')
-        else:
+        if not stacked_cat:
             self.obj_name = header['OBJECT'].replace("'","")
-        self.pix_area = np.pi*np.array(header['AXIS1'].split(','), dtype=float)*np.array(header['AXIS2'].split(','), dtype=float)/4
-        self.pix_size = float(max(header['CDELT1'],header['CDELT2']))
-        self.bmaj = np.array(header['BMAJ'].split(','), dtype=float)
-        self.bmin = np.array(header['BMIN'].split(','), dtype=float)
+            self.pix_area = np.pi*float(header['AXIS1'])*float(header['AXIS2'])/4
+            self.pix_size = float(max(header['CDELT1'],header['CDELT2']))
+            self.bmaj = float(header['SF_BMAJ'])
+            self.bmin = float(header['SF_BMIN'])
 
-        # Determine frequency axis:
-        for i in range(1,5):
-            if 'FREQ' in header['CTYPE'+str(i)]:
-                freq_idx = i
-                break
-        self.freq = np.array(header['CRVAL'+str(freq_idx)].split(','), dtype=float)/1e6 #MHz
-        self.dfreq = np.array(header['CDELT'+str(freq_idx)].split(','), dtype=float)/1e6 #MHz
+            # Determine frequency axis:
+            for i in range(1,5):
+                if 'FREQ' in header['CTYPE'+str(i)]:
+                    freq_idx = i
+                    break
+            self.freq = float(header['CRVAL'+str(freq_idx)])/1e6 #MHz
+            self.dfreq = float(header['CDELT'+str(freq_idx)])/1e6 #MHz
 
-        self.center = SkyCoord(np.array(header['CRVAL1'].split(','), dtype=float)*u.degree,
-                               np.array(header['CRVAL2'].split(','), dtype=float)*u.degree)
+            self.center = SkyCoord(float(header['CRVAL1'])*u.degree,
+                                   float(header['CRVAL2'])*u.degree)
 
         self.dN = None
         self.edges = None
@@ -81,7 +74,7 @@ class Catalog:
         self.edges = self.edges[:cutoff_high+1]
         self.dN = self.dN[:cutoff_high]
 
-    def plot_number_counts(self, dpi):
+    def plot_number_counts(self, fancy, dpi):
         '''
         Plot number count bins and fit a power law
         '''
@@ -94,13 +87,17 @@ class Catalog:
         plt.yscale('log')
         plt.autoscale(enable=True, axis='x', tight=True)
 
-        plt.ylabel('$N$')
-        plt.xlabel('$S (\\mathrm{Jy})$')
+        if fancy:
+            plt.ylabel('$N$')
+            plt.xlabel('$S (\\mathrm{Jy})$')
+        else:
+            plt.ylabel('N')
+            plt.xlabel('S (Jy)')
 
         plt.savefig(os.path.join(self.dirname,self.cat_name+'_number_counts.png'), dpi=dpi)
         plt.close()
 
-    def plot_diff_number_counts(self, flux_col, dpi, rms_image=None, completeness=None):
+    def plot_diff_number_counts(self, flux_col, fancy, dpi, rms_image=None, completeness=None):
         '''
         Compute and plot differential number counts
         input RMS image is used to account for sky coverage
@@ -113,12 +110,12 @@ class Catalog:
         # Correct fluxes for primary beam pattern
         source_coord = SkyCoord(self.table['RA'], self.table['DEC'], unit='deg')
         offsets = source_coord.separation(self.center).deg
-        flux_corr = helpers.flux_correction(offsets, self.freq[0], self.dfreq[0], 0.8)
+        flux_corr = helpers.flux_correction(offsets, self.freq, self.dfreq, 0.8)
 
-        self.table[flux_col] /= flux_corr
+        corrected_flux = self.table[flux_col] / flux_corr
 
-        bin_means = [np.mean(self.table[flux_col][np.logical_and(self.table[flux_col] > self.edges[i],
-                             self.table[flux_col] < self.edges[i+1])]) for i in range(len(self.edges)-1)]
+        bin_means = [np.mean(corrected_flux[np.logical_and(corrected_flux > self.edges[i],
+                             corrected_flux < self.edges[i+1])]) for i in range(len(self.edges)-1)]
         solid_angle = self.pix_area*self.pix_size**2*(np.pi/180)**2
         dS = np.diff(self.edges)
         S = np.array(bin_means)
@@ -150,7 +147,11 @@ class Catalog:
 
             plt.xscale('log')
             plt.autoscale(enable=True, axis='x', tight=True)
-            plt.xlabel('$\\sigma$ (Jy/beam)')
+
+            if fancy:
+                plt.xlabel('$\\sigma$ (Jy/beam)')
+            else:
+                plt.xlabel('RMS (Jy/beam)')
             plt.ylabel('Coverage')
 
             plt.savefig(os.path.join(self.dirname, self.cat_name+'_rms_coverage.png'), dpi=300)
@@ -183,13 +184,17 @@ class Catalog:
         plt.xscale('log')
         plt.yscale('log')
 
-        plt.ylabel('$S^{5/2}\\  \\mathrm{d}N/\\mathrm{d}S \\ (\\mathrm{Jy}^{3/2} \\mathrm{sr}^{-1})$')
-        plt.xlabel('$S (\\mathrm{Jy})$')
+        if fancy:
+            plt.ylabel('$S^{5/2}\\  \\mathrm{d}N/\\mathrm{d}S \\ (\\mathrm{Jy}^{3/2} \\mathrm{sr}^{-1})$')
+            plt.xlabel('$S (\\mathrm{Jy})$')
+        else:
+            plt.ylabel('S^5/2 dN/dS (Jy^3/2 / sr)')
+            plt.xlabel('S (Jy)')
         plt.legend()
         plt.savefig(os.path.join(self.dirname, self.cat_name+'_diff_counts.png'), dpi=dpi)
         plt.close()
 
-    def plot_resolved_fraction(self, dpi):
+    def plot_resolved_fraction(self, stacked_cat, fancy, dpi):
         '''
         Plot fraction of resolved sources
         '''
@@ -220,34 +225,34 @@ class Catalog:
 
             return majerr, minerr
 
-        if isinstance(self.obj_name, list):
-            resolved = Table()
-            unresolved = Table()
-            for i, name in enumerate(self.obj_name):
-                table_in = self.table[self.table['Pointing_id'] == 'PT-'+name.replace("'","")]
-                resolved_idx = isresolved(table_in, self.bmaj[i], self.bmin[i])
-
-                resolved = vstack([resolved,table_in[resolved_idx]])
-                unresolved = vstack([unresolved,table_in[~resolved_idx]])
+        if stacked_cat:
+            resolved_idx = self.table['Resolved']
         else:
             resolved_idx = isresolved(self.table, self.bmaj, self.bmin)
 
-            resolved = self.table[resolved_idx]
-            unresolved = self.table[~resolved_idx]
+        resolved = self.table[resolved_idx]
+        unresolved = self.table[~resolved_idx]
 
+        alpha = min(1000 / (len(unresolved)+len(resolved)), 1)
         plt.scatter(unresolved['Peak_flux']/unresolved['Isl_rms'],
                     unresolved['Total_flux']/unresolved['Peak_flux'],
-                    color='b', s=5, label=f'Unresolved ({len(unresolved)})',
-                    alpha=0.1)
+                    color='navy', s=5, label=f'Unresolved ({len(unresolved)})',
+                    alpha=alpha)
         plt.scatter(resolved['Peak_flux']/resolved['Isl_rms'],
                     resolved['Total_flux']/resolved['Peak_flux'],
-                    color='r', s=5, label=f'Resolved ({len(resolved)})',
-                    alpha=0.1)
+                    color='crimson', s=5, label=f'Resolved ({len(resolved)})',
+                    alpha=alpha)
         plt.xscale('log')
         plt.yscale('log')
 
-        plt.ylabel('$S_{tot}/S_{peak}$')
+        plt.xlim(left=4)
+
+        if fancy:
+            plt.ylabel('$S_{tot}/S_{peak}$')
+        else:
+            plt.ylabel('Total flux / Peak flux')
         plt.xlabel('S/N')
+
         leg = plt.legend()
         for lh in leg.legendHandles: 
             lh.set_alpha(1)
@@ -264,17 +269,28 @@ def main():
     catalog_file = args.catalog
     rms_image = args.rms_image
     comp_corr = args.comp_corr
+    stacked_cat = args.stacked_catalog
+    fancy = args.fancy
     dpi = args.dpi
 
+    if fancy:
+        plt.rc('font', **{'family': 'serif', 'serif': ['Computer Modern']})
+        plt.rc('text', usetex=True)
+        plt.rcParams.update({'font.size': 14})
+
     flux_col = 'Total_flux'
-    catalog = Catalog(catalog_file)
+    catalog = Catalog(catalog_file, stacked_cat)
     catalog.get_flux_bins(flux_col, nbins=50)
 
-    catalog.plot_number_counts(dpi)
-    resolved = catalog.plot_resolved_fraction(dpi)
+    catalog.plot_number_counts(fancy, dpi)
 
     if rms_image or comp_corr:
-        catalog.plot_diff_number_counts(flux_col, dpi, rms_image, comp_corr)
+        catalog.plot_diff_number_counts(flux_col, fancy, dpi, rms_image, comp_corr)
+
+    resolved = catalog.plot_resolved_fraction(stacked_cat, fancy, dpi)
+    if not stacked_cat:
+        catalog.table['Resolved'] = resolved
+        catalog.table.write(catalog_file, overwrite=True)
 
 def new_argument_parser():
 
@@ -291,8 +307,13 @@ def new_argument_parser():
                                 fractions for correcting differential number counts.
                                 the file is assumed to contain at least the arrays of 
                                 flux bins, completeness fraction.""")
+    parser.add_argument('--stacked_catalog', action='store_true',
+                        help="""Indicate if catalog is built up from multiple catalogs,
+                                for example with combine_catalogs script.""")
+    parser.add_argument('--fancy', action='store_true',
+                        help="Output plots with latex font and formatting.")
     parser.add_argument('-d', '--dpi', default=300,
-                        help="""DPI of the output images (default = 300).""")
+                        help="DPI of the output images (default = 300).")
 
     return parser
 

@@ -5,12 +5,14 @@ import urllib
 import gzip
 import time
 
+import numpy as np
 from math import ceil
+from itertools import cycle, islice
 
 from astropy import units as u
 from astropy.io import ascii
 from astropy.table import Table, vstack, join, Column
-from astropy.coordinates import SkyCoord
+from astropy.coordinates import SkyCoord, Angle
 
 FIRSTCATURL='http://sundog.stsci.edu/cgi-bin/searchfirst'
 NVSSCATURL='http://www.cv.nrao.edu/cgi-bin/NVSSlist.pl'
@@ -50,6 +52,37 @@ def getsumssdata(ra,dec,offset):
     '''
     Get the SUMSS catalogue at a given position.
     '''
+    def reduce_sumssfile(sumssfile, ra, dec, offset):
+        '''
+        Reduce the SUMSS file by filtering RA as the catalog
+        is only strictly increasing in Right Ascension
+        '''
+        ra = Angle(ra, unit='deg')
+        dec = Angle(dec, unit='deg')
+
+        min_ra = ra - offset/np.cos(dec.radian)
+        max_ra = ra + offset/np.cos(dec.radian)
+
+        min_ra_idx = None
+        max_ra_idx = None
+
+        # Iterate through list, account for 
+        for i, line in cycle(enumerate(sumssfile)):
+            if int(line[0:2]) >= min_ra.hms[0] and int(line[3:5]) >= min_ra.hms[1] and min_ra_idx is None:
+                min_ra_idx = i
+            if int(line[0:2]) >= max_ra.hms[0] and int(line[3:5]) >= max_ra.hms[1] and max_ra_idx is None:
+                max_ra_idx = i
+            if max_ra_idx and min_ra_idx:
+                break
+
+        start = min_ra_idx
+        stop = max_ra_idx
+        if start > stop:
+            stop += len(sumssfile)
+
+        sumssfile = list(islice(cycle(sumssfile), start, stop))
+        return sumssfile
+
     center = SkyCoord(ra,dec)
 
     # Define SUMSS columns
@@ -67,6 +100,7 @@ def getsumssdata(ra,dec,offset):
     sumssfile=geturl(SUMSSCATURL,'',30)
 
     sumssfile = sumssfile.split('\n')[:-1]
+    sumssfile = reduce_sumssfile(sumssfile, ra, dec, offset)
 
     if sumssfile:
         sumsstable = ascii.read(sumssfile, names=sumss_columns, exclude_names=exclude_columns)

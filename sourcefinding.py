@@ -297,11 +297,9 @@ def main():
 
     # Determine output by mode
     if mode.lower() in 'cataloging':
-        outfile = outcat.replace('bdsfcat','catalog')
         bdsf_cat = transform_cat(bdsf_cat, survey, img, bdsf_args)
-        print(f'Wrote catalog to {outfile}')
-        bdsf_cat.write(outfile, overwrite=True)
-        os.system('rm '+outcat)
+        print(f'Wrote catalog to {outcat}')
+        bdsf_cat.write(outcat, overwrite=True)
 
     if mode.lower() in 'masking':
         bdsf_cat.write(outcats[i], overwrite=True)

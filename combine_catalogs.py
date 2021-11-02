@@ -13,7 +13,7 @@ class MergeNumbersAsList(MergeStrategy):
         if left == right:
             return left
         else:
-            return str(left)+','+str(right)
+            return None
 
 def combine_catalogs(catalogs, output_cat):
     cats = []
