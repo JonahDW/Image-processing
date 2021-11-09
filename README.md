@@ -28,7 +28,7 @@ usage: sourcefinding.py [-h] [-o OUTPUT_FORMAT [OUTPUT_FORMAT ...]] [-s SIZE]
 
 positional arguments:
   mode                  Purpose of the sourcefinding, choose between
-                        cataloging (catalog) or masking (mask). This choice will
+                        cataloging (c) or masking (m). This choice will
                         determine the parameter file that PyBDSF will use, as
                         well as the output files.
   image                 Name of the image to perform sourcefinding on.
@@ -37,10 +37,13 @@ optional arguments:
   -h, --help            show this help message and exit
   -o OUTPUT_FORMAT [OUTPUT_FORMAT ...], --output_format OUTPUT_FORMAT [OUTPUT_FORMAT ...]
                         Output format of the catalog, supported formats are:
-                        ds9, fits, star, kvis, ascii, csv. Only fits format
-                        includes all available information and can be used for
-                        further processing. Input can be multiple entries,
-                        e.g. -o fits ds9 (default = fits).
+                        ds9, fits, star, kvis, ascii, csv. In case of fits,
+                        ascii, ds9, and csv, additionally choose output
+                        catalog as either source list (srl) or gaussian list
+                        (gaul), default srl. Only a fits format source list
+                        includes all available information and will be used
+                        for further processing. Input can be multiple entries,
+                        e.g. -o fits:srl ds9 (default = fits:srl).
   -s SIZE, --size SIZE  If masking, multiply the size of the masks by this
                         amount (default = 1.0).
   --plot [PLOT]         Plot the results of the sourcefinding as a png of the

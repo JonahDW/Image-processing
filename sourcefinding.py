@@ -53,31 +53,38 @@ def run_bdsf(image, output_dir, argfile, output_format):
             img.export_image(outfile=imname+'_'+img_type+'.fits', clobber=True, img_type=img_type)
 
     outcat = None
-    for fmt in output_format:
-        if fmt.lower() == 'ds9':
-            outcatalog = imname+'_bdsfcat.ds9.reg'
+    for of in output_format:
+        fmt = of.lower().split(':')
+        if len(fmt) == 1:
+            fmt = fmt[0]
+            cat_type = 'srl'
+        if len(fmt) == 2:
+            fmt, cat_type = fmt
+
+        if fmt == 'ds9':
+            outcatalog = imname+'_'+cat_type+'_bdsfcat.ds9.reg'
             img.write_catalog(outfile=outcatalog,
                               format=fmt,
-                              catalog_type='gaul',
+                              catalog_type=cat_type,
                               clobber=True)
-        elif fmt.lower() == 'kvis':
+        elif fmt == 'kvis':
             outcatalog = imname+'_bdsfcat.kvis.ann'
             img.write_catalog(outfile=outcatalog,
                               format=fmt,
                               catalog_type='gaul',
                               clobber=True)
-        elif fmt.lower() == 'star':
+        elif fmt == 'star':
             outcatalog = imname+'_bdsfcat.star'
             img.write_catalog(outfile=outcatalog,
                               format=fmt,
                               catalog_type='gaul',
                               clobber=True)
         else:
-            outcatalog = imname+'_bdsfcat.'+fmt
+            outcatalog = imname+'_'+cat_type+'_bdsfcat.'+fmt
             img.write_catalog(outfile=outcatalog,
                               format=fmt,
-                              **args_dict['write_catalog'])
-            if fmt.lower() == 'fits':
+                              catalog_type=cat_type)
+            if fmt == 'fits' and cat_type == 'srl':
                 outcat = outcatalog
 
     return outcat, img
@@ -278,7 +285,7 @@ def main():
         os.mkdir(output_dir)
 
     if output_format is None:
-        output_format = ['fits']
+        output_format = ['fits:srl']
 
     outcat, img = run_bdsf(inpimage, output_dir, argfile=bdsf_args, output_format=output_format)
 
@@ -297,6 +304,7 @@ def main():
 
     # Determine output by mode
     if mode.lower() in 'cataloging':
+        outcat = outcat.replace('srl_','')
         bdsf_cat = transform_cat(bdsf_cat, survey, img, bdsf_args)
         print(f'Wrote catalog to {outcat}')
         bdsf_cat.write(outcat, overwrite=True)
@@ -322,11 +330,12 @@ def new_argument_parser():
                         help="""Name of the image to perform sourcefinding on.""")
     parser.add_argument("-o", "--output_format", nargs='+', default=None,
                         help="""Output format of the catalog, supported formats
-                                are: ds9, fits, star, kvis, ascii, csv. Only
-                                fits format includes all available information
-                                and can be used for further processing. 
-                                Input can be multiple entries, 
-                                e.g. -o fits ds9 (default = fits).""")
+                                are: ds9, fits, star, kvis, ascii, csv. In case of fits,
+                                ascii, ds9, and csv, additionally choose output catalog as either
+                                source list (srl) or gaussian list (gaul), default srl. Only
+                                a fits format source list includes all available information and will be 
+                                used for further processing. Input can be multiple entries, 
+                                e.g. -o fits:srl ds9 (default = fits:srl).""")
     parser.add_argument("-s", "--size", default=1.0,
                         help="""If masking, multiply the size of the masks by this
                                 amount (default = 1.0).""")

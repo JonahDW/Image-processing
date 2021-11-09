@@ -25,9 +25,5 @@
         "psf_ratio" : false,
         "psf_ratio_aper" : false,
         "island_mask" : false
-    }, 
-    "write_catalog" : {
-	"catalog_type" : "srl",
-	"clobber" : true
     }
 }
