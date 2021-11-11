@@ -175,8 +175,8 @@ class ExternalCatalog:
                 cat_info = json.load(f)
 
             if cat_info['data_columns']['quality_flag']:
-                self.cat = self.cat[self.cat[cat_info['data_columns']['quality_flag']] > 0]
-            n_rejected = len(self.cat[self.cat[cat_info['data_columns']['quality_flag']] > 0])
+                self.cat = self.cat[self.cat[cat_info['data_columns']['quality_flag']] == 1]
+            n_rejected = len(self.cat[self.cat[cat_info['data_columns']['quality_flag']] == 1])
             if  n_rejected > 0:
                 print(f'Excluding {n_rejected} sources that have a negative quality flag')
 
@@ -191,7 +191,7 @@ class Pointing:
     def __init__(self, catalog, filename):
         self.dirname = os.path.dirname(filename)
 
-        self.cat = catalog[catalog['Quality_flag'] > 0]
+        self.cat = catalog[catalog['Quality_flag'] == 1]
         if len(self.cat) < len(catalog):
             print(f'Excluding {len(catalog) - len(self.cat)} sources that have a negative quality flag')
 
