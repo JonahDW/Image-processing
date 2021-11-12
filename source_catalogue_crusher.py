@@ -311,8 +311,8 @@ def main():
         doselectonsameidx = doselectonsameidx.replace('-','')
 
         # 
-        island_selection = np.logical_and(np.zeros(len(data['Quality_flag'])).astype(dtype=bool),
-                                          np.zeros(len(data['Quality_flag'])).astype(dtype=bool))
+        island_selection = np.logical_and(np.zeros(len(catalog['Quality_flag'])).astype(dtype=bool),
+                                          np.zeros(len(catalog['Quality_flag'])).astype(dtype=bool))
         #
         for isl in catalog[doselectonsameidx]:
             select_isl_idmatch = catalog[doselectonsameidx] == isl
