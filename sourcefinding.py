@@ -142,13 +142,6 @@ def transform_cat(catalog, survey_name, img, argfile):
     '''
     header = dict([x.split(' = ') for x in catalog.meta['comments'][4:]])
 
-    # Remove sources that are below pixel threshold
-    path = Path(__file__).parent / argfile
-    with open(path) as f:
-        args_dict = json.load(f)
-    thresh = args_dict['process_image']['thresh_pix']
-    catalog = catalog[catalog['Peak_flux']/catalog['Isl_rms'] > thresh]
-
     pointing_center = SkyCoord(float(header['CRVAL1'])*u.degree,
                                float(header['CRVAL2'])*u.degree)
     pointing_name = ['PT-'+header['OBJECT'].replace("'","")] * len(catalog)

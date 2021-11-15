@@ -233,6 +233,10 @@ class Catalog:
         resolved = self.table[resolved_idx]
         unresolved = self.table[~resolved_idx]
 
+        # Log scale before plotting
+        plt.xscale('log')
+        plt.yscale('log')
+
         alpha = min(1000 / (len(unresolved)+len(resolved)), 1)
         plt.scatter(unresolved['Peak_flux']/unresolved['Isl_rms'],
                     unresolved['Total_flux']/unresolved['Peak_flux'],
@@ -242,8 +246,6 @@ class Catalog:
                     resolved['Total_flux']/resolved['Peak_flux'],
                     color='crimson', s=5, label=f'Resolved ({len(resolved)})',
                     alpha=alpha)
-        plt.xscale('log')
-        plt.yscale('log')
 
         plt.xlim(left=4)
 
