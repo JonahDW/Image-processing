@@ -62,21 +62,26 @@ def make_header(catheader):
     generates a header structure for WCS 
     to work with
     """
-    wcsheader  = { 'NAXIS'  : 2,                                       # number of axis 
-                'NAXIS1' : float(catheader['AXIS1']),                  # number of elements along the axis (e.g. number of pixel)
-                'CTYPE1' : str(catheader['CTYPE1']).replace('\'',''),  # axis type
-                'CRVAL1' : float(catheader['CRVAL1']),                 # Coordinate value at reference
-                'CRPIX1' : float(catheader['CRPIX1']),                 # pixel value at reference
-                'CUNIT1' : str(catheader['CUNIT1']).replace('\'',''),  # axis unit
-                'CDELT1' : float(catheader['CDELT1']),                 # coordinate increment
+    wcsheader = {}
 
-                'NAXIS2' : float(catheader['AXIS2']),                  # number of elements along the axis (e.g. number of pixel)
-                'CTYPE2' : str(catheader['CTYPE2']).replace('\'',''),  # axis type
-                'CRVAL2' : float(catheader['CRVAL2']),                 # Coordinate value at reference
-                'CRPIX2' : float(catheader['CRPIX2']),                 # pixel value at reference
-                'CUNIT2' : str(catheader['CUNIT2']).replace('\'',''),  # axis unit
-                'CDELT2' : float(catheader['CDELT2']),                 # coordinate increment
-         }
+    wcsheader['NAXIS'] = 2                                             # number of axis 
+    wcsheader['NAXI1'] = float(catheader['AXIS1'])                     # number of elements along the axis (e.g. number of pixel)
+    wcsheader['CTYPE1'] = str(catheader['CTYPE1']).replace('\'','')    # axis type
+    wcsheader['CRVAL1'] = float(catheader['CRVAL1'])                   # Coordinate value at reference
+    wcsheader['CRPIX1'] = float(catheader['CRPIX1'])                   # pixel value at reference
+    wcsheader['CDELT1'] = float(catheader['CDELT1'])                   # coordinate increment
+    wcsheader['CUNIT1'] = 'deg'
+    if catheader.__contains__('CUNIT1') == True:
+        wcsheader['CUNIT1'] = str(catheader['CUNIT1']).replace('\'',''),  # axis unit
+
+    wcsheader['NAXI2'] = float(catheader['AXIS2'])                     # number of elements along the axis (e.g. number of pixel)
+    wcsheader['CTYPE2'] = str(catheader['CTYPE2']).replace('\'','')    # axis type
+    wcsheader['CRVAL2'] = float(catheader['CRVAL2'])                   # Coordinate value at reference
+    wcsheader['CRPIX2'] = float(catheader['CRPIX2'])                   # pixel value at reference
+    wcsheader['CDELT2'] = float(catheader['CDELT2'])                   # coordinate increment
+    wcsheader['CUNIT2'] = 'deg'
+    if catheader.__contains__('CUNIT2') == True:
+        wcsheader['CUNIT2'] = str(catheader['CUNIT2']).replace('\'',''),  # axis unit
 
     return wcsheader
 
