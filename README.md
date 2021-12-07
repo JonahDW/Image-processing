@@ -17,7 +17,7 @@ Extract this somewhere on a permanent location on your filesystem.
 
 If you want to avoid doing all the installations or don't have the permissions to do so, there is an accompanying docker image for this module in my [`sourcefinding-docker`](https://github.com/JonahDW/sourcefinding-docker) repository. Details on how to obtain the image are found there.
 
-#Scripts 
+## Scripts 
 
 The following scripts have a lot of flexibility built in, for a simple recipe of how a full run of this software would look on an image, example bash scripts are present in the `example_scripts` folder.
 
@@ -66,16 +66,11 @@ optional arguments:
 
 ## source_catalogue_crusher.py
 
-The puprose of this tool is to mark individual sources in the
-catalogue not to be used. So essentailly to clean up the catalogue or
-specify sources to be used in the next steps e.g. in the catalog
-matching.
-It also can generate a KVIS annotation file
-and provide easy way to edit the Quality flag in the catalogue. The
-following example will generate a KVIS annotation file.
+The purpose of this tool is to mark individual sources in the catalogue not to be used. So essentailly to clean up the catalogue or specify sources to be used in the next steps e.g. in the catalog matching.
+
+It also can generate a KVIS annotation file and provide easy way to edit the Quality flag in the catalogue. The following example will generate a KVIS annotation file.
 
 ```python sourcefinding.py --CAT_FILE=CATALOUGE.fits --KVISANNOUTPUT=CATALOUGE```
-
 
 
 ```
