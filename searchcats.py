@@ -17,6 +17,8 @@ from astropy.coordinates import SkyCoord, Angle
 FIRSTCATURL='http://sundog.stsci.edu/cgi-bin/searchfirst'
 NVSSCATURL='http://www.cv.nrao.edu/cgi-bin/NVSSlist.pl'
 SUMSSCATURL='http://www.astrop.physics.usyd.edu.au/sumsscat/sumsscat.Mar-11-2008'
+TGSSCATURL='https://vo.astron.nl/tgssadr/q/cone/scs.xml'
+RACSCATURL = 'https://casda.csiro.au/casda_vo_tools/scs/racs_dr1_sources_galacticcut_v2021_08_v01'
 
 def geturl(url,params,timeout,tries=5):
     '''
@@ -88,11 +90,12 @@ def getsumssdata(ra,dec,offset):
     # Define SUMSS columns
     sumss_columns = ['RA(h)','RA(m)','RA(s)',
                      'DEC(d)','DEC(m)','DEC(s)',
-                     'E_RA','E_DEC','Peak_flux',
-                     'E_Peak_flux','Total_flux',
-                     'E_Total_Flux','Maj','Min',
-                     'PA', 'DC_Maj','DC_Min','DC_PA',
-                     'Mosaic','nMosaics','YPix','XPix']
+                     'RA_Error','Dec_Error',
+                     'Flux_36_cm','Flux_36_cm_Error',
+                     'Int_flux_36_cm','Int_Flux_36_cm_Error',
+                     'Fit_Major_axis','Fit_Minor_Axis','Fit_Position_Angle',
+                     'Major_Axis','Minor_Axis','Position_Angle',
+                     'Mosaic_Name','Number_Mosaics','X_Pixel','Y_Pixel']
     exclude_columns = ['RA(h)','RA(m)','RA(s)',
                       'DEC(d)','DEC(m)','DEC(s)']
 
@@ -164,8 +167,8 @@ def getfirstdata(ra,dec,offset):
     # Define FIRST columns
     first_columns = ['Distance','RA(h)','RA(m)','RA(s)',
                      'DEC(d)','DEC(m)','DEC(s)','Side lobe prob',
-                     'Peak_flux','Total_flux','RMS','DC_Maj',
-                     'DC_Min','DC_PA','Maj','Min','PA','Field name',
+                     'Peak flux','Int flux','RMS','Deconv MajAx',
+                     'Deconv MinAx','Deconv PosAng','Majax','Minax','PosAng','Field Name',
                      'SDSS Match <8 arcsec','Closest SDSS sep (arcsec)',
                      'SDSS i','SD Cl','2MASS Match <8 arcsec',
                      'Closest 2MASS sep (arcsec)','2MASS K','Mean Epoch (year)',
@@ -289,13 +292,13 @@ def getnvssdata(ra,dec,offset):
     nvsstable = []
     # Define NVSS columns for deconvolved values
     nvss_dc_columns = ['RA','DEC','Distance','Total_flux',
-                       'DC_Maj','DC_Min','DC_PA','Res',
+                       'DC_Major','DC_Minor','DC_PA','Res',
                        'Pol_flux','Pol_ang','Field',
                        'YPix','XPix']
 
     # Define NVSS columns for fitted values
     nvss_fit_columns = ['RA','DEC','Distance','Peak_flux',
-                        'Maj','Min','PA','Res',
+                        'Major','Minor','PA','Res',
                         'Pol_flux','Pol_ang','Field',
                         'YPix','XPix']
 
@@ -332,3 +335,38 @@ def getnvssdata(ra,dec,offset):
     nvsstable.add_column(c, index=0)
 
     return nvsstable
+
+def gettgssdata(central_coord,offset):
+    import pyvo as vo
+    # Open vo service
+    tgss = vo.dal.SCSService(TGSSCATURL)
+
+    # Search around coordinates
+    tgssresults = tgss.search(pos=central_coord, radius=offset, verbosity=3)
+    tgsstable = tgssresults.to_table()
+
+    # Replace object columns because TGSS is horrible
+    for col in tgsstable.colnames:
+        if tgsstable[col].dtype == object:
+            tgsstable[col] = tgsstable[col].astype('str')
+
+    if len(tgsstable) == 0:
+        print("No TGSS data available.")
+        sys.exit()
+
+    return tgsstable
+
+def getracsdata(central_coord,offset):
+    import pyvo as vo
+    # Open vo service
+    racs = vo.dal.SCSService(RACSCATURL)
+
+    # Search around coordinates
+    racsresults = racs.search(pos=central_coord, radius=offset, verbosity=3)
+    racstable = racsresults.to_table()
+
+    if len(racstable) == 0:
+        print("No RACS data available.")
+        sys.exit()
+
+    return racstable

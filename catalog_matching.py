@@ -55,7 +55,7 @@ class SourceEllipse:
         separation (float) - Additional range in degrees
         '''
         offset_coord   = SkyCoord(ra_list, dec_list, unit='deg')
-        sky_separation = self.skycoord.separation(offset_coord) 
+        sky_separation = self.skycoord.separation(offset_coord)
 
         # this factor just increases the number of sources to check
         # so no harm to the process
@@ -160,32 +160,20 @@ class ExternalCatalog:
         self.name = name
         self.cat = catalog
 
-        if name in ['NVSS','SUMSS','FIRST']:
-            columns = {'ra':'RA','dec':'DEC','majax':'Maj','minax':'Min',
-                       'pa':'PA','peak_flux':'Peak_flux','total_flux':'Total_flux'}
-            self.sources = [SourceEllipse(source, columns) for source in self.cat]
-            beam, freq = helpers.get_beam(name, center.ra.deg, center.dec.deg)
+        beam, freq, columns = helpers.get_properties(name, center.ra.deg, center.dec.deg)
+        self.BMaj  = beam[0]
+        self.BMin  = beam[1]
+        self.BPA   = beam[2]
+        self.freq  = freq
 
-            self.BMaj  = beam[0]
-            self.BMin  = beam[1]
-            self.BPA   = beam[2]
-            self.freq  = freq
-        else:
-            path = Path(__file__).parent / 'parsets/extcat.json'
-            with open(path) as f:
-                cat_info = json.load(f)
+        if 'quality_flag' in columns:
+            if columns['quality_flag']:
+                self.cat = self.cat[self.cat[columns['quality_flag']] == 1]
+                n_rejected = len(self.cat[self.cat[columns['quality_flag']] == 1])
+                if  n_rejected > 0:
+                    print(f'Excluding {n_rejected} sources that have a negative quality flag')
 
-            if cat_info['data_columns']['quality_flag']:
-                self.cat = self.cat[self.cat[cat_info['data_columns']['quality_flag']] == 1]
-            n_rejected = len(self.cat[self.cat[cat_info['data_columns']['quality_flag']] == 1])
-            if  n_rejected > 0:
-                print(f'Excluding {n_rejected} sources that have a negative quality flag')
-
-            self.sources = [SourceEllipse(source, cat_info['data_columns']) for source in self.cat]
-            self.BMaj = cat_info['properties']['BMAJ']
-            self.BMin = cat_info['properties']['BMIN']
-            self.BPA  = cat_info['properties']['BPA']
-            self.freq = cat_info['properties']['freq']
+        self.sources = [SourceEllipse(source, columns) for source in self.cat]
 
 class Pointing:
 
@@ -240,11 +228,11 @@ class Pointing:
         if not nvsstable:
             sys.exit()
 
-        nvsstable['Maj'].unit = u.arcsec
-        nvsstable['Min'].unit = u.arcsec
+        nvsstable['Major'].unit = u.arcsec
+        nvsstable['Minor'].unit = u.arcsec
 
-        nvsstable['Maj'] = nvsstable['Maj'].to(u.deg)
-        nvsstable['Min'] = nvsstable['Min'].to(u.deg)
+        nvsstable['Major'] = nvsstable['Major'].to(u.deg)
+        nvsstable['Minor'] = nvsstable['Minor'].to(u.deg)
         nvsstable['PA']  = nvsstable['PA']
 
         nvsstable['RA']  = nvsstable['RA'].to(u.deg)
@@ -266,17 +254,18 @@ class Pointing:
         if not firsttable:
             sys.exit()
 
-        firsttable['Maj'].unit = u.arcsec
-        firsttable['Min'].unit = u.arcsec
+        firsttable['Majax'].unit = u.arcsec
+        firsttable['Minax'].unit = u.arcsec
 
-        firsttable['Maj'] = firsttable['Maj'].to(u.deg)
-        firsttable['Min'] = firsttable['Min'].to(u.deg)
-        firsttable['PA']  = firsttable['PA']
+        firsttable['Majax'] = firsttable['Majax'].to(u.deg)
+        firsttable['Minax'] = firsttable['Minax'].to(u.deg)
+        firsttable['PosAng']  = firsttable['PosAng']
+
         firsttable['RA']  = firsttable['RA'].to(u.deg)
         firsttable['DEC'] = firsttable['DEC'].to(u.deg)
 
-        firsttable['Peak_flux'] /= 1e3 #convert to Jy
-        firsttable['Total_flux'] /= 1e3 #convert to Jy
+        firsttable['Peak flux'] /= 1e3 #convert to Jy
+        firsttable['Int flux'] /= 1e3 #convert to Jy
 
         return firsttable
 
@@ -293,20 +282,68 @@ class Pointing:
                                      dec = self.center.dec,
                                      offset = 0.5*self.fov)
 
-        sumsstable['Maj'].unit = u.arcsec
-        sumsstable['Min'].unit = u.arcsec
+        sumsstable['Fit_Major_Axis'].unit = u.arcsec
+        sumsstable['Fit_Minor_Axis'].unit = u.arcsec
 
-        sumsstable['Maj'] = sumsstable['Maj'].to(u.deg)
-        sumsstable['Min'] = sumsstable['Min'].to(u.deg)
-        sumsstable['PA']  = sumsstable['PA']
+        sumsstable['Fit_Major_Axis'] = sumsstable['Fit_Major_Axis'].to(u.deg)
+        sumsstable['Fit_Minor_Axis'] = sumsstable['Fit_Minor_Axis'].to(u.deg)
+        sumsstable['Fit_Position_Angle']  = sumsstable['Fit_Position_Angle']
 
-        sumsstable['RA'] = sumsstable['RA'].to(u.deg)
+        sumsstable['RA']  = sumsstable['RA'].to(u.deg)
         sumsstable['DEC'] = sumsstable['DEC'].to(u.deg)
 
-        sumsstable['Peak_flux'] /= 1e3 #convert to Jy
-        sumsstable['Total_flux'] /= 1e3 #convert to Jy
+        sumsstable['Flux_36_cm']  /= 1e3 #convert to Jy
+        sumsstable['Int_Flux_36_cm'] /= 1e3 #convert to Jy
 
         return sumsstable
+
+    def query_TGSS(self):
+        '''
+        Match the pointing to the TGSS catalog
+        '''
+        tgsstable = sc.gettgssdata(central_coord = self.center,
+                                   offset = 0.5*self.fov)
+
+        tgsstable['MAJAX']   = tgsstable['MAJAX'].to(u.deg)
+        tgsstable['MINAX']   = tgsstable['MINAX'].to(u.deg)
+        tgsstable['e_MAJAX'] = tgsstable['e_MAJAX'].to(u.deg)
+        tgsstable['e_MINAX'] = tgsstable['e_MINAX'].to(u.deg)
+
+        # Convert to Jy
+        tgsstable['Sint']       /= 1e3
+        tgsstable['Spk']        /= 1e3
+        tgsstable['e_Sint']     /= 1e3
+        tgsstable['e_Spk']      /= 1e3
+        tgsstable['Island_RMS'] /= 1e3
+
+        return tgsstable
+
+    def query_RACS(self):
+        '''
+        Match the pointing to the RACS catalog
+        '''
+        racstable = sc.getracsdata(central_coord = self.center,
+                                   offset = 0.5*self.fov)
+
+        racstable['maj']   = racstable['maj'].to(u.deg)
+        racstable['min']   = racstable['min'].to(u.deg)
+        racstable['e_maj'] = racstable['e_maj'].to(u.deg)
+        racstable['e_min'] = racstable['e_min'].to(u.deg)
+
+        racstable['dc_maj']   = racstable['dc_maj'].to(u.deg)
+        racstable['dc_min']   = racstable['dc_min'].to(u.deg)
+        racstable['e_dc_maj'] = racstable['e_dc_maj'].to(u.deg)
+        racstable['e_dc_min'] = racstable['e_dc_min'].to(u.deg)
+
+        # Convert to Jy
+        racstable['total_flux_source']          /= 1e3
+        racstable['peak_flux']                  /= 1e3
+        racstable['e_total_flux_source_pybdsf'] /= 1e3
+        racstable['e_total_flux_source']        /= 1e3
+        racstable['e_peak_flux']                /= 1e3
+        racstable['noise']                      /= 1e3
+
+        return racstable
 
 def match_catalogs(pointing, ext, sigma_extent, search_dist):
     '''
@@ -665,6 +702,12 @@ def main():
     elif ext_cat == 'FIRST':
         ext_table = pointing.query_FIRST()
         ext_catalog = ExternalCatalog(ext_cat, ext_table, pointing.center)
+    elif ext_cat == 'TGSS':
+        ext_table = pointing.query_TGSS()
+        ext_catalog = ExternalCatalog(ext_cat, ext_table, pointing.center)
+    elif ext_cat == 'RACS':
+        ext_table = pointing.query_RACS()
+        ext_catalog = ExternalCatalog(ext_cat, ext_table, pointing.center)
     elif os.path.exists(ext_cat):
         ext_table = Table.read(ext_cat)
         if 'bdsfcat' in ext_cat:
@@ -708,7 +751,7 @@ def new_argument_parser():
                         help="""Pointing catalog made by PyBDSF.""")
     parser.add_argument("ext_cat", default="NVSS",
                         help="""External catalog to match to, choice between
-                                NVSS, SUMMS, FIRST or a file. If the external
+                                NVSS, SUMMS, FIRST, TGSS, RACS or a file. If the external
                                 catalog is a PyBDSF catalog, make sure the filename
                                 has 'bdsfcat' in it. If a different catalog, the
                                 parsets/extcat.json file must be used to specify its

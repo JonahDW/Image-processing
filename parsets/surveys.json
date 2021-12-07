@@ -1,25 +1,89 @@
 {
-    "FIRST" : {
-    "name" : "FIRST",
-    "Maj" : 6.4,
-    "Maj2" : 5.4,
-    "Maj3" : 6.8,
-    "Min" : 5.4,
-    "PA" : 0.0,
-    "Freq" : 1400.0
-    },
-    "NVSS" : {
-    "name" : "NVSS",
-    "Maj" : 45.0,
-    "Min" : 45.0,
-    "PA" : 0.0,
-    "Freq" : 1400.0
-    },
-    "SUMSS" : {
-    "name" : "SUMSS",
-    "Maj" : 43.0,
-    "Min" : 43.0,
-    "PA" : 0.0,
-    "Freq" : 843.0
-    }
+	"FIRST" : {
+		"data_columns" : {
+			"ra" : "RA",
+			"dec" : "DEC",
+			"majax" : "Majax",
+			"minax" : "Minax",
+			"pa" : "PosAng",
+			"peak_flux" : "Peak flux",
+			"total_flux" : "Int flux"
+	 	},
+		"properties" : {
+			"BMAJ" : 6.4,
+			"BMAJ2" : 5.4,
+			"BMAJ3" : 6.8,
+			"BMIN" : 5.4,
+			"BPA" : 0.0,
+			"freq" : 1400.0
+		}
+	},
+	"NVSS" : {
+		"data_columns" : {
+			"ra" : "RA",
+			"dec" : "DEC",
+			"majax" : "Major",
+			"minax" : "Minor",
+			"pa" : "PA",
+			"peak_flux" : "Peak_flux",
+			"total_flux" : "Total_flux"
+		},
+	"properties" : {
+			"BMAJ" : 45.0,
+			"BMIN" : 45.0,
+			"BPA" : 0.0,
+			"freq" : 1400.0
+		}
+	},
+	"SUMSS" : {
+		"data_columns" : {
+			"ra" : "RA",
+			"dec" : "DEC",
+			"majax" : "Fit_Major_Axis",
+			"minax" : "Fit_Minor_Axis",
+			"pa" : "Fit_Position_Angle",
+			"peak_flux" : "Flux_36_cm",
+			"total_flux" : "Int_Flux_36_cm"
+		},
+		"properties" : {
+			"BMAJ" : 43.0,
+			"BMIN" : 43.0,
+			"BPA" : 0.0,
+			"freq" : 843.0
+		}
+	},
+	"TGSS" : {
+		"data_columns" : {
+			"ra" : "RA",
+			"dec" : "DEC",
+			"majax" : "MAJAX",
+			"minax" : "MINAX",
+			"pa" : "PA",
+			"peak_flux" : "Spk",
+			"total_flux" : "Sint"
+		},
+		"properties" : {
+			"BMAJ" : 25.0,
+			"BMIN" : 25.0,
+			"BPA" : 0.0,
+			"freq" : 150.0
+		}
+	},
+	"RACS" : {
+		"data_columns" : {
+			"ra" : "ra",
+			"dec" : "dec",
+			"majax" : "maj",
+			"minax" : "min",
+			"pa" : "pa",
+			"peak_flux" : "peak_flux",
+			"total_flux" : "total_flux_source"
+		},
+		"properties" : {
+			"BMAJ" : 25.0,
+			"BMIN" : 25.0,
+			"BPA" : 0.0,
+			"freq" : 887.5
+		}
+	}
 }
