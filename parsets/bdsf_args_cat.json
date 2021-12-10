@@ -9,8 +9,7 @@
         "rms_box_bright" : "(40,15)",
 	"atrous_do" : true,
 	"atrous_orig_isl" : true,
-	"atrous_jmax" : 3,
-	"mean_map" : "zero"
+	"atrous_jmax" : 3
     },
     "export_image" : {
         "ch0" : true,
