@@ -45,7 +45,7 @@ class SourceEllipse:
 
         self.skycoord = SkyCoord(self.RA, self.DEC, unit='deg')
 
-    def match(self, ra_list, dec_list, maj_list, min_list, pa_list, sigma_extent, search_dist, header):
+    def match(self, ra_list, dec_list, maj_list, min_list, pa_list, sigma_extent, search_dist, header, overlap_percentage):
         '''
         Match the ellipse with a (list of) source(s)
 
@@ -111,15 +111,33 @@ class SourceEllipse:
 
                 if max(ra_check_s_where.shape) > 0 or max(ra_to_s_where.shape) > 0:
 
-                    do_they_overlap = False
+                    do_they_overlap       = False
+
                     split_check_s_source  = helpers.ellipse_RA_check(check_source)
                     split_to_s_sources    = helpers.ellipse_RA_check(to_sources)
 
                     for a in range(len(split_check_s_source)):
                         for b in range(len(split_to_s_sources)):
                             do_they_overlap_split = np.invert(Polygon(split_check_s_source[a]).intersection(Polygon(split_to_s_sources[b])).is_empty)
+
+                            #
+                            # evaluate the sub componets of the sources
+                            #
                             if do_they_overlap_split == True:
-                                do_they_overlap = True
+                                
+                                intersection_area = Polygon(split_check_s_source[a]).intersection(Polygon(split_to_s_sources[b])).area
+                                check_source_area = Polygon(split_check_s_source[a]).area
+                                to_sources_area   = Polygon(split_to_s_sources[b]).area
+
+                                if (intersection_area != check_source_area) and  (intersection_area != to_sources_area):
+
+                                    areas_percentage = [intersection_area/check_source_area, intersection_area/to_sources_area]
+
+                                    if max(areas_percentage) * 100 > overlap_percentage:
+                                        do_they_overlap == True
+
+                                del intersection_area, check_source_area, to_sources_area
+
                             #
                             del do_they_overlap_split
                             gc.collect()
@@ -128,14 +146,33 @@ class SourceEllipse:
                     # this is a realy cool thing
                     # use vertices to a Polygon and shapely to check if they intersect
                     # https://gis.stackexchange.com/questions/243459/drawing-ellipse-with-shapely/243462#243462
+
                     do_they_overlap = np.invert(Polygon(check_source).intersection(Polygon(to_sources)).is_empty)
                     #
+
+                    #
+                    # evaluates the overlap in area 
+                    #
+                    if do_they_overlap == True:
+
+                        intersection_area = Polygon(check_source).intersection(Polygon(to_sources)).area
+                        check_source_area = Polygon(check_source).area
+                        to_sources_area   = Polygon(to_sources).area
+
+                        if (intersection_area != check_source_area) and  (intersection_area != to_sources_area):
+
+                            areas_percentage = [intersection_area/check_source_area, intersection_area/to_sources_area]
+
+                            if max(areas_percentage) * 100 < overlap_percentage:
+                                do_they_overlap == False
+
+                        del intersection_area, check_source_area, to_sources_area
 
                 # adjust the matching of the major_matches and exclude sources 
                 #
                 maj_match[s]    = do_they_overlap
 
-                del do_they_overlap,check_source,to_sources
+                del do_they_overlap,check_source,to_sources 
                 gc.collect()
 
         return np.where(maj_match)[0]
@@ -345,7 +382,7 @@ class Pointing:
 
         return racstable
 
-def match_catalogs(pointing, ext, sigma_extent, search_dist):
+def match_catalogs(pointing, ext, sigma_extent, search_dist, overlap_percentage):
     '''
     Match the sources of the chosen external catalog to the sources in the pointing
     '''
@@ -357,7 +394,8 @@ def match_catalogs(pointing, ext, sigma_extent, search_dist):
                                     pointing.cat['Maj'],pointing.cat['Min'],
                                     pointing.cat['PA'],
                                     sigma_extent, search_dist,
-                                    helpers.make_header(pointing.header)))
+                                    helpers.make_header(pointing.header), 
+                                    overlap_percentage))
 
     return matches
 
@@ -687,8 +725,9 @@ def main():
     annotate = args.annotate
     annotate_nonmatched = args.annotate_nonmatched
 
-    sigma_extent = args.match_sigma_extent
-    search_dist  = args.search_dist/3600 # to degrees
+    sigma_extent   = args.match_sigma_extent
+    search_dist    = args.search_dist/3600 # to degrees
+    source_overlap = args.source_overlap_percent
 
     pointing_cat = Table.read(pointing)
     pointing = Pointing(pointing_cat, pointing)
@@ -722,7 +761,7 @@ def main():
         print('No sources were found to match, most likely the external catalog has no coverage here')
         exit()
 
-    matches      = match_catalogs(pointing, ext_catalog, sigma_extent, search_dist)
+    matches      = match_catalogs(pointing, ext_catalog, sigma_extent, search_dist, source_overlap)
     matches_info = info_match(pointing, ext_catalog, matches, fluxtype, alpha, output)
 
     matches_info['INPUT'] = {}
@@ -763,6 +802,10 @@ def new_argument_parser():
     parser.add_argument("--search_dist", default=0, type=float,
                         help="""Additional search distance beyond the source size to be
                                 used for matching, in arcseconds (default = 0)""")
+    parser.add_argument("--source_overlap_percent", default=50, type=float,
+                        help="""The percentage is used, of the ratio of size of the intersection 
+                                area to size of the individual sources, to fine-tune source matches, 
+                                in percentage (default = 50)""")
     parser.add_argument("--astro", nargs="?", const=True,
                         help="""Plot the astrometric offset of the matches,
                                 optionally provide an output filename
