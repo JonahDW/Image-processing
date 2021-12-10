@@ -92,8 +92,8 @@ def getsumssdata(ra,dec,offset):
                      'DEC(d)','DEC(m)','DEC(s)',
                      'RA_Error','Dec_Error',
                      'Flux_36_cm','Flux_36_cm_Error',
-                     'Int_flux_36_cm','Int_Flux_36_cm_Error',
-                     'Fit_Major_axis','Fit_Minor_Axis','Fit_Position_Angle',
+                     'Int_Flux_36_cm','Int_Flux_36_cm_Error',
+                     'Fit_Major_Axis','Fit_Minor_Axis','Fit_Position_Angle',
                      'Major_Axis','Minor_Axis','Position_Angle',
                      'Mosaic_Name','Number_Mosaics','X_Pixel','Y_Pixel']
     exclude_columns = ['RA(h)','RA(m)','RA(s)',
