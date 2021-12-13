@@ -134,7 +134,7 @@ class SourceEllipse:
                                     areas_percentage = [intersection_area/check_source_area, intersection_area/to_sources_area]
 
                                     if max(areas_percentage) * 100 > overlap_percentage:
-                                        do_they_overlap == True
+                                        do_they_overlap = True
 
                                 del intersection_area, check_source_area, to_sources_area
 
@@ -164,7 +164,7 @@ class SourceEllipse:
                             areas_percentage = [intersection_area/check_source_area, intersection_area/to_sources_area]
 
                             if max(areas_percentage) * 100 < overlap_percentage:
-                                do_they_overlap == False
+                                do_they_overlap = False
 
                         del intersection_area, check_source_area, to_sources_area
 
