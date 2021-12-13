@@ -43,7 +43,7 @@ class SourceEllipse:
         if column_dict['total_flux']:
             self.IntFlux = catalog_entry[column_dict['total_flux']]
 
-        self.skycoord = SkyCoord(self.RA, self.DEC, unit='deg')
+        self.skycoord = SkyCoord(self.RA, self.DEC, unit='deg',frame='icrs')
 
     def match(self, ra_list, dec_list, maj_list, min_list, pa_list, sigma_extent, search_dist, header, overlap_percentage):
         '''
@@ -79,11 +79,13 @@ class SourceEllipse:
         #
         maj_match = sky_separation < FWHM_to_sigma_extent * deprojection_factor * (self.Maj/2. + maj_list/2.) + search_dist
 
-        # Check if sources match within Bmin/2 boundaries
-        # these are the source we do not need to check 
-        # further, they always match
+        # Check if sources match within the smallest source extend
+        # these are the source we do not check further
         #
-        min_match = sky_separation <= FWHM_to_sigma_extent * (self.Min/2. + min_list/2.)
+        get_minor_ext = self.Min < min_list
+        minor_ext     = np.where(get_minor_ext, self.Min, min_list) 
+        #
+        min_match     = sky_separation.value <=  FWHM_to_sigma_extent *  minor_ext
 
         # Check out the source between the maj_match and min_match boundaries
         #
