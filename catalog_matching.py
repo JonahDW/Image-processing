@@ -43,7 +43,7 @@ class SourceEllipse:
         if column_dict['total_flux']:
             self.IntFlux = catalog_entry[column_dict['total_flux']]
 
-        self.skycoord = SkyCoord(self.RA, self.DEC, unit='deg')
+        self.skycoord = SkyCoord(self.RA, self.DEC, unit='deg',frame='icrs')
 
     def match(self, ra_list, dec_list, maj_list, min_list, pa_list, sigma_extent, search_dist, header, overlap_percentage):
         '''
@@ -79,11 +79,13 @@ class SourceEllipse:
         #
         maj_match = sky_separation < FWHM_to_sigma_extent * deprojection_factor * (self.Maj/2. + maj_list/2.) + search_dist
 
-        # Check if sources match within Bmin/2 boundaries
-        # these are the source we do not need to check 
-        # further, they always match
+        # Check if sources match within the smallest source extend
+        # these are the source we do not check further
         #
-        min_match = sky_separation <= FWHM_to_sigma_extent * (self.Min/2. + min_list/2.)
+        get_minor_ext = self.Min < min_list
+        minor_ext     = np.where(get_minor_ext, self.Min, min_list) 
+        #
+        min_match     = sky_separation.value <=  FWHM_to_sigma_extent *  minor_ext
 
         # Check out the source between the maj_match and min_match boundaries
         #
@@ -134,7 +136,7 @@ class SourceEllipse:
                                     areas_percentage = [intersection_area/check_source_area, intersection_area/to_sources_area]
 
                                     if max(areas_percentage) * 100 > overlap_percentage:
-                                        do_they_overlap == True
+                                        do_they_overlap = True
 
                                 del intersection_area, check_source_area, to_sources_area
 
@@ -164,7 +166,7 @@ class SourceEllipse:
                             areas_percentage = [intersection_area/check_source_area, intersection_area/to_sources_area]
 
                             if max(areas_percentage) * 100 < overlap_percentage:
-                                do_they_overlap == False
+                                do_they_overlap = False
 
                         del intersection_area, check_source_area, to_sources_area
 
@@ -802,10 +804,10 @@ def new_argument_parser():
     parser.add_argument("--search_dist", default=0, type=float,
                         help="""Additional search distance beyond the source size to be
                                 used for matching, in arcseconds (default = 0)""")
-    parser.add_argument("--source_overlap_percent", default=50, type=float,
+    parser.add_argument("--source_overlap_percent", default=80, type=float,
                         help="""The percentage is used, of the ratio of size of the intersection 
                                 area to size of the individual sources, to fine-tune source matches, 
-                                in percentage (default = 50)""")
+                                in percentage (default = 80)""")
     parser.add_argument("--astro", nargs="?", const=True,
                         help="""Plot the astrometric offset of the matches,
                                 optionally provide an output filename
