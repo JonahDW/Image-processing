@@ -802,10 +802,10 @@ def new_argument_parser():
     parser.add_argument("--search_dist", default=0, type=float,
                         help="""Additional search distance beyond the source size to be
                                 used for matching, in arcseconds (default = 0)""")
-    parser.add_argument("--source_overlap_percent", default=50, type=float,
+    parser.add_argument("--source_overlap_percent", default=80, type=float,
                         help="""The percentage is used, of the ratio of size of the intersection 
                                 area to size of the individual sources, to fine-tune source matches, 
-                                in percentage (default = 50)""")
+                                in percentage (default = 80)""")
     parser.add_argument("--astro", nargs="?", const=True,
                         help="""Plot the astrometric offset of the matches,
                                 optionally provide an output filename
