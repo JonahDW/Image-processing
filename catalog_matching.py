@@ -770,6 +770,7 @@ def main():
     matches_info['INPUT']['alpha'] = alpha 
     matches_info['INPUT']['match_sigma_extend'] = sigma_extent 
     matches_info['INPUT']['search_dist'] = search_dist
+    matches_info['INPUT']['source_overlap_percent'] = source_overlap
 
     if plot:
         plot_catalog_match(pointing, ext_catalog, matches, plot, dpi)
