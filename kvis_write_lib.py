@@ -173,11 +173,7 @@ def matches_to_kvis(pointing, ext, matches, annotate, annotate_nonmatchedcat, si
         toprt = f'ELLIPSE {source.RA:.6f} {source.DEC:.6f} {source.Maj*FWHMtosemimajmin:.6f} {source.Min*FWHMtosemimajmin:.6f} {source.PA:.4f} \n'
         non_match_int_lines.append(toprt)
 
-    if annotate is True:
-        outputfilename = os.path.join(pointing.dirname,f'match_{ext.name}_{pointing.name}.ann')
-    else:
-        outputfilename = annotate
-
+    outputfilename = os.path.join(pointing.dirname,f'match_{ext.name}_{pointing.name}.ann')
     kvisfile = open(outputfilename,'w')
     kvisfile.writelines('# Annotation file used for KVIS\n')
     kvisfile.writelines('# \n')
@@ -216,3 +212,77 @@ def matches_to_kvis(pointing, ext, matches, annotate, annotate_nonmatchedcat, si
             kvisfile.writelines(line)
 
     kvisfile.close()
+
+def matches_to_ds9(pointing, ext, matches, annotate, annotate_nonmatchedcat, sigma_extent):
+    '''
+    Write the results to a kvis annotation file
+
+    CAUTION: KVIS uses the semimajor and semiminor axes for the Ellipse
+             Bmaj, Bmin FWHM needs to be divided by a factor of 2
+    '''
+    # Define the source sizes and match to the semiminor and semimajor axis
+    FWHM_to_sigma_extent  = sigma_extent / (2*np.sqrt(2*np.log(2)))
+    FWHMtosemimajmin      = 0.5 * FWHM_to_sigma_extent
+
+    match_ext_lines = []
+    match_int_lines = []
+    non_match_ext_lines = []
+    for i, match in enumerate(matches):
+        if len(match) > 0:
+            source = ext.sources[i]
+            toprt = f'ellipse {source.RA:.6f} {source.DEC:.6f} {source.Min*FWHMtosemimajmin:.6f} {source.Maj*FWHMtosemimajmin:.6f} {source.PA:.4f} \n'
+            match_ext_lines.append(toprt)
+            for ind in match:
+                source = pointing.sources[ind]
+                toprt = f'ellipse {source.RA:.6f} {source.DEC:.6f} {source.Min*FWHMtosemimajmin:.6f} {source.Maj*FWHMtosemimajmin:.6f} {source.PA:.4f} \n'
+                match_int_lines.append(toprt)
+        else:
+            source = ext.sources[i]
+            toprt = f'ellipse {source.RA:.6f} {source.DEC:.6f} {source.Min*FWHMtosemimajmin:.6f} {source.Maj*FWHMtosemimajmin:.6f} {source.PA:.4f} \n'
+            non_match_ext_lines.append(toprt)
+
+    non_matches = np.setdiff1d(np.arange(len(pointing.sources)), np.concatenate(matches).ravel())
+    non_match_int_lines = []
+    for i in non_matches:
+        source = pointing.sources[i]
+        toprt = f'ellipse {source.RA:.6f} {source.DEC:.6f} {source.Min*FWHMtosemimajmin:.6f} {source.Maj*FWHMtosemimajmin:.6f} {source.PA:.4f} \n'
+        non_match_int_lines.append(toprt)
+
+    outputfilename = os.path.join(pointing.dirname,f'match_{ext.name}_{pointing.name}.reg')
+    regfile = open(outputfilename,'w')
+    regfile.writelines('# Region file format: DS9 CARTA 1.4\n')
+    regfile.writelines('# \n')
+
+    regfile.writelines('# Catalogues: '+ext.name+' and '+pointing.name+' \n')
+    regfile.writelines('# \n')
+
+    regfile.writelines("global font='helvetica 10 normal roman' wcs=wcs\n")
+    regfile.writelines("fk5\n")
+
+    # Write different sources with different colors
+    regfile.writelines('# Matched sources from external catalog\n')
+    regfile.writelines('# \n')
+    regfile.writelines('global color=blue\n')
+    for line in match_ext_lines:
+        regfile.writelines(line)
+    regfile.writelines('# Matched sources from internal catalog\n')
+    regfile.writelines('# \n')
+    regfile.writelines('global color=red\n')
+    for line in match_int_lines:
+        regfile.writelines(line)
+
+    if annotate_nonmatchedcat:
+
+        regfile.writelines('# Non matched sources from external catalog\n')
+        regfile.writelines('# \n')
+        regfile.writelines('global color=white\n')
+        for line in non_match_ext_lines:
+            regfile.writelines(line)
+
+        regfile.writelines('# Non matched sources from internal catalog\n')
+        regfile.writelines('# \n')
+        regfile.writelines('global color=green\n')
+        for line in non_match_int_lines:
+            regfile.writelines(line)
+
+    regfile.close()

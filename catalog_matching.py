@@ -453,11 +453,16 @@ def info_match(pointing, ext, matches, fluxtype, alpha, output):
     int_flux    = []
     separation  = []
     n_matches  = []
+    match_alpha = []
     if fluxtype == 'Total':
         for i, match in enumerate(matches):
             if len(match) > 0:
                 ext_flux.append(ext.sources[i].IntFlux)
                 int_flux.append(np.sum([pointing.sources[m].IntFlux for m in match]))
+
+                flux_ratio = ext.sources[i].IntFlux/np.sum([pointing.sources[m].IntFlux for m in match])
+                match_alpha.append(np.log(flux_ratio)/np.log(pointing.freq/ext.freq))
+
                 source_coord = SkyCoord(ext.sources[i].RA, ext.sources[i].DEC, unit='deg')
                 separation.append(source_coord.separation(pointing.center).deg)
                 n_matches.append(len(match))
@@ -466,6 +471,10 @@ def info_match(pointing, ext, matches, fluxtype, alpha, output):
             if len(match) > 0:
                 ext_flux.append(ext.sources[i].PeakFlux)
                 int_flux.append(np.sum([pointing.sources[m].PeakFlux for m in match]))
+
+                flux_ratio = ext.sources[i].PeakFlux/np.sum([pointing.sources[m].PeakFlux for m in match])
+                match_alpha.append(np.log(flux_ratio)/np.log(pointing.freq/ext.freq))
+
                 source_coord = SkyCoord(ext.sources[i].RA, ext.sources[i].DEC, unit='deg')
                 separation.append(source_coord.separation(pointing.center).deg)
                 n_matches.append(len(match))
@@ -474,10 +483,11 @@ def info_match(pointing, ext, matches, fluxtype, alpha, output):
         sys.exit()
 
     match_info['fluxes'][fluxtype] = {}
-    match_info['fluxes'][fluxtype]['ext_flux']   = ext_flux
-    match_info['fluxes'][fluxtype]['int_flux']   = int_flux
-    match_info['fluxes'][fluxtype]['separation'] = separation
-    match_info['fluxes'][fluxtype]['n_matches']  = n_matches
+    match_info['fluxes'][fluxtype]['ext_flux']    = ext_flux
+    match_info['fluxes'][fluxtype]['int_flux']    = int_flux
+    match_info['fluxes'][fluxtype]['separation']  = separation
+    match_info['fluxes'][fluxtype]['n_matches']   = n_matches
+    match_info['fluxes'][fluxtype]['match_alpha'] = match_alpha
 
     # Scale flux density to proper frequency
     ext_flux_corrected = np.array(ext_flux) * (pointing.freq/ext.freq)**-alpha
@@ -676,16 +686,20 @@ def plot_fluxes(match_info, pointing, ext, fluxtype, flux, dpi):
         plt.savefig(flux, dpi=dpi)
     plt.close()
 
-def write_to_catalog(pointing, ext, matches, output):
+def write_to_catalog(pointing, ext, matches, match_info, fluxtype, output):
     '''
     Write the matched catalogs to a fits file
     '''
+    ext.cat['Match_alpha'] = 0.0
     ext.cat['idx'] = np.arange(len(ext.cat))
     pointing.cat['idx'] = np.inf
 
+    match_alpha_iter = iter(match_info['fluxes'][fluxtype]['match_alpha'])
     for i, match in enumerate(matches):
-        for j in match:
-            pointing.cat[j]['idx'] = i
+        if len(match) > 0:
+            ext.cat[i]['Match_alpha'] = next(match_alpha_iter)
+            for j in match:
+                pointing.cat[j]['idx'] = i
 
     out = join(ext.cat, pointing.cat, keys='idx')
 
@@ -779,11 +793,13 @@ def main():
     if flux:
         plot_fluxes(matches_info, pointing, ext_catalog, fluxtype, flux, dpi)
     if output:
-        write_to_catalog(pointing, ext_catalog, matches, output)
+        write_to_catalog(pointing, ext_catalog, matches, matches_info, fluxtype, output)
         write_info(pointing, ext_catalog, matches_info, output)
 
-    if annotate: 
+    if annotate == 'kvis':
         kvis.matches_to_kvis(pointing, ext_catalog, matches, annotate, annotate_nonmatched, sigma_extent)
+    if annotate == 'ds9':
+        kvis.matches_to_ds9(pointing, ext_catalog, matches, annotate, annotate_nonmatched, sigma_extent)
 
 def new_argument_parser():
 
@@ -832,9 +848,9 @@ def new_argument_parser():
                         help="""Output the result of the matching into a catalog,
                                 optionally provide an output filename
                                 (default = don't output a catalog).""")
-    parser.add_argument("--annotate", nargs="?", const=True,
-                        help="""Output the result of the matching into a kvis
-                                annotation file, optionally provide an output filename
+    parser.add_argument("--annotate", nargs="?",
+                        help="""Output the result of the matching into an
+                                annotation file, either kvis or ds9
                                 (default = don't output annotation file).""")
     parser.add_argument("--annotate_nonmatched", action='store_true', default=False,
                         help="""Annotation file will include the non-macthed catalogue sources 

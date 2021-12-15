@@ -114,10 +114,10 @@ def get_properties(identity, ra_center, dec_center):
 
     if identity == 'FIRST':
         if (dec_center > 4.5558333):
-            BMaj = beam_dict[identity]['BMAJ2']
+            BMaj = cat_dict['properties']['BMAJ2']
         elif (dec_center < -2.506944):
                 if (ra_center > (21*15)) or (ra_center < (3*15)):
-                    BMaj = beam_dict[identity]['BMAJ3']
+                    BMaj = cat_dict['properties']['BMAJ3']
     if identity == 'SUMSS':
         BMaj = BMaj/np.sin(np.radians(dec_center))
     if identity == 'TGSS':
