@@ -16,15 +16,12 @@ from pathlib import Path
 from astropy.wcs import WCS
 from astropy.io import fits
 from astropy import units as u
-from astropy.stats import sigma_clip
 from astropy.table import Table, Column
 from astropy.coordinates import SkyCoord
-from scipy import ndimage
 
 from regions import EllipseSkyRegion, Regions
 
 import bdsf
-import casacore.images as pim
 import helpers
 
 def run_bdsf(image, output_dir, argfile, output_format):
@@ -90,49 +87,28 @@ def run_bdsf(image, output_dir, argfile, output_format):
 
     return outcat, img
 
-def read_alpha(inpimage, catalog, regions):
+def read_alpha(inpimage, alpha_image, catalog, regions):
     '''
     Determine spectral indices of the sources
     '''
-    imname = os.path.join(os.path.dirname(inpimage),
-                          os.path.basename(inpimage).split('.')[0])
-    tt0 = pim.image(imname+'.image.tt0')
-    tt0.putmask(False)
-    tt0.tofits(imname+'_tt0.fits')
-    tt0 = fits.open(imname+'_tt0.fits')
-
-    tt1 = pim.image(imname+'.image.tt1')
-    tt1.putmask(False)
-    tt1.tofits(imname+'_tt1.fits')
-    tt1 = fits.open(imname+'_tt1.fits')
+    weight = helpers.open_fits_casa(inpimage)
+    alpha = helpers.open_fits_casa(alpha_image)
 
     # Get WCS from header and drop freq and stoke axes
-    wcs = WCS(tt0[0].header, naxis=2)
-    pixel_regions = [region.to_pixel(wcs) for region in regions]
+    alpha_wcs = WCS(alpha[0].header, naxis=2)
+    alpha_regions = [region.to_pixel(alpha_wcs) for region in regions]
 
-    alpha = tt1[0].data[0,0,:,:]/tt0[0].data[0,0,:,:]
-    alpha = sigma_clip(alpha, sigma=3, masked=True)
+    weight_wcs = WCS(weight[0].header, naxis=2)
+    weight_regions = [region.to_pixel(weight_wcs) for region in regions]
 
-    # Smooth image with NaNs
-    U = alpha.filled(np.nan)
-    V = U.copy()
-    V[np.isnan(U)]=0
-    VV = ndimage.gaussian_filter(V, sigma=5, order=0)
-
-    W = 0*U.copy()+1
-    W[np.isnan(U)]=0
-    WW = ndimage.gaussian_filter(V, sigma=5, order=0)
-
-    alpha == VV/WW
-    alpha_list, alpha_err_list = helpers.measure_image_regions(pixel_regions, alpha, weight_image=tt1[0].data[0,0,:,:])
+    alpha_list, alpha_err_list = helpers.measure_image_regions(alpha_regions, 
+                                                               alpha[0].data[0,0,:,:], 
+                                                               weight_image=weight[0].data[0,0,:,:],
+                                                               weight_regions=weight_regions)
 
     a = Column(alpha_list, name='Spectral_index')
     b = Column(alpha_err_list, name='E_Spectral_index')
     catalog.add_columns([a,b], indexes=[10,10]) 
-
-    # Clean up
-    os.remove(imname+'_tt0.fits')
-    os.remove(imname+'_tt1.fits')
 
     return catalog
 
@@ -294,7 +270,7 @@ def main():
         plot_sf_results(f'{imname}_ch0.fits', f'{imname}_rms.fits', bdsf_regions, plot)
 
     if spectral_index:
-        bdsf_cat = read_alpha(inpimage, bdsf_cat, bdsf_regions)
+        bdsf_cat = read_alpha(inpimage, spectral_index, bdsf_cat, bdsf_regions)
 
     # Determine output by mode
     if mode.lower() in 'cataloging':
@@ -338,11 +314,10 @@ def new_argument_parser():
                                 of the image with sources overlaid, optionally
                                 provide an output filename (default = do
                                 not plot the results).""")
-    parser.add_argument("--spectral_index", action='store_true',
-                        help="""Measure the spectral indices of the sources.
-                                this requires the presence of a tt0 and tt1
-                                image in the same folder (default = do not measure
-                                spectral indices).""")
+    parser.add_argument("--spectral_index", nargs="?", const=True,
+                        help="""Measure the spectral indices of the sources using a specified
+                                spectral index image. Can be FITS or CASA format.
+                                (default = do not measure spectral indices).""")
     parser.add_argument("--survey", default=None,
                         help="Name of the survey to be used in source ids.")
     return parser

@@ -1,13 +1,16 @@
+import os
+import json
+import pickle
+import numpy as np
+from pathlib import Path
+
 from astropy.coordinates import SkyCoord
 from astropy import units as u
+from astropy.io import fits
 import astropy.wcs as WCS
 
+import casacore.images as pim
 from matplotlib.patches import Ellipse
-
-from pathlib import Path
-import numpy as np
-import pickle
-import json
 
 def pickle_to_file(data, fname):
     fh = open(fname, 'wb')
@@ -20,7 +23,24 @@ def pickle_from_file(fname):
     fh.close()
     return data
 
-def meerkat_lpb(a, b, freq, offset):
+def open_fits_casa(file):
+    '''
+    Open an image in fits or CASA format and return the image
+    '''
+    if '.fits' in file.lower():
+        imagedata = fits.open(file)
+    else:
+        image = pim.image(file)
+        image.putmask(False)
+        image.tofits('temp.fits', velocity=False)
+        imagedata = fits.open('temp.fits')
+
+    # Clean up
+    os.system('rm temp.fits')
+
+    return imagedata
+
+def meerkat_lpb(beam_fwhm, b, freq, offset):
     '''
     MeerKAT L-band primary beam from Mauch et al 2019
 
@@ -30,7 +50,7 @@ def meerkat_lpb(a, b, freq, offset):
     freq (float) -- Central frequency in GHz
     offset (array) -- Offsets for which to calculate the beam amplitude
     '''
-    theta_beam = a*(1.5/freq)
+    theta_beam = beam_fwhm*(1.5/freq)
     x = offset/theta_beam
     a_beam = (np.cos(b*np.pi*x)/(1-4*(b*x)**2))**2
 
@@ -38,19 +58,20 @@ def meerkat_lpb(a, b, freq, offset):
 
 def flux_correction(center_dist, freq, dfreq, alpha):
     # Correct flux modified beam pattern induced by spectral shape
+    meerkat_beam_fwhm = 57.5/60 #degrees
     freqs = np.linspace(freq-dfreq/2,freq+dfreq/2,100)/1e3
     flux = freqs**(-alpha)
 
-    ref_beam = meerkat_lpb(0.985, 1.189, freqs, 0)
+    ref_beam = meerkat_lpb(meerkat_beam_fwhm, 1.189, freqs, 0)
     ref_flux = np.trapz(flux*ref_beam, freqs)
 
     total_flux = []
     attenuation = []
     for offset in center_dist:
-        beam = meerkat_lpb(0.985, 1.189, freqs, offset)
+        beam = meerkat_lpb(meerkat_beam_fwhm, 1.189, freqs, offset)
         total_flux.append(np.trapz(flux*beam, freqs)/ref_flux)
 
-        beam_cen = meerkat_lpb(0.985, 1.189, freq/1e3, offset)
+        beam_cen = meerkat_lpb(meerkat_beam_fwhm, 1.189, freq/1e3, offset)
         attenuation.append(beam_cen)
 
     correction = np.array(total_flux)/np.array(attenuation)
@@ -128,7 +149,7 @@ def get_properties(identity, ra_center, dec_center):
     columns = cat_dict['data_columns']
     return beam, freq, columns
 
-def measure_image_regions(pixel_regions, image, weight_image=None):
+def measure_image_regions(pixel_regions, image, weight_image=None, weight_regions=None):
     '''
     Measure values in images an from given regions
 
@@ -140,20 +161,27 @@ def measure_image_regions(pixel_regions, image, weight_image=None):
     values = []
     err_values = []
     # Measure value for each source
-    for region in pixel_regions:
+    for i, region in enumerate(pixel_regions):
         mask = region.to_mask(mode='center')
         mask_data = mask.to_image(image.shape).astype(bool)
 
         image_values = image[mask_data]
-        image_values = image_values.filled(np.nan)
+        if np.ma.isMaskedArray(image_values):
+            image_values = image_values.filled(np.nan)
 
         nan_values = np.isnan(image_values)
         image_values = image_values[~nan_values]
         if weight_image is None:
             weights = np.ones(image_values.shape)
         else:
-            weights = weight_image[mask_data]
-            weights = weights[~nan_values]
+            weight_mask = weight_regions[i].to_mask(mode='center')
+            weight_mask_data = weight_mask.to_image(weight_image.shape).astype(bool)
+
+            weights = weight_image[weight_mask_data]
+            try:
+                weights = weights[~nan_values]
+            except IndexError:
+                weights = np.ones(image_values.shape)
 
         # Get weighted mean and standard deviations
         if len(image_values) > 0.5*np.sum(mask_data):

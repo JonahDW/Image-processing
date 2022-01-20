@@ -31,7 +31,8 @@ Will perform sourcefinding on the image `myimage.image` and produce both a fits 
 
 ```
 usage: sourcefinding.py [-h] [-o OUTPUT_FORMAT [OUTPUT_FORMAT ...]] [-s SIZE]
-                        [--plot [PLOT]] [--spectral_index] [--survey SURVEY]
+                        [--plot [PLOT]] [--spectral_index [SPECTRAL_INDEX]]
+                        [--survey SURVEY]
                         mode image
 
 positional arguments:
@@ -57,10 +58,10 @@ optional arguments:
   --plot [PLOT]         Plot the results of the sourcefinding as a png of the
                         image with sources overlaid, optionally provide an
                         output filename (default = do not plot the results).
-  --spectral_index      Measure the spectral indices of the sources. this
-                        requires the presence of a tt0 and tt1 image in the
-                        same folder (default = do not measure spectral
-                        indices).
+  --spectral_index [SPECTRAL_INDEX]
+                        Measure the spectral indices of the sources using a
+                        specified spectral index image. Can be FITS or CASA
+                        format. (default = do not measure spectral indices).
   --survey SURVEY       Name of the survey to be used in source ids.
 ```
 

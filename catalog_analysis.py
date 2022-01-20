@@ -10,8 +10,10 @@ from astropy.io import fits
 from astropy.table import Table, vstack
 from astropy.coordinates import SkyCoord
 
+import json
 from pathlib import Path
 from argparse import ArgumentParser
+from numpyencoder import NumpyEncoder
 
 import matplotlib
 matplotlib.use('Agg')
@@ -114,11 +116,14 @@ class Catalog:
 
         corrected_flux = self.table[flux_col] / flux_corr
 
+        counts = {}
+
         bin_means = [np.mean(corrected_flux[np.logical_and(corrected_flux > self.edges[i],
                              corrected_flux < self.edges[i+1])]) for i in range(len(self.edges)-1)]
-        solid_angle = self.pix_area*self.pix_size**2*(np.pi/180)**2
-        dS = np.diff(self.edges)
-        S = np.array(bin_means)
+        counts['solid_angle'] = self.pix_area*self.pix_size**2*(np.pi/180)**2
+        counts['dN'] = self.dN
+        counts['dS'] = np.diff(self.edges)
+        counts['S'] = np.array(bin_means)
 
         count_correction = 1
         if completeness:
@@ -127,7 +132,7 @@ class Catalog:
             flux_means = np.array([(data[0][i]+data[0][i+1])/2 for i in range(len(data[0])-1)])
 
             comp_frac = interp1d(flux_means, np.mean(data[1], axis=0), bounds_error=False, fill_value=(0,1))
-            count_correction = comp_frac(S)
+            count_correction = comp_frac(counts['S'])
 
         if rms_image:
             image = fits.open(rms_image)[0]
@@ -138,8 +143,8 @@ class Catalog:
 
             # Define a splin and interpolate the values
             rms_coverage = interp1d(rms_range, coverage, fill_value='extrapolate')
-            count_correction = rms_coverage(S/5.0)
-            solid_angle = np.count_nonzero(~np.isnan(rms_data))*self.pix_size**2*(np.pi/180)**2
+            count_correction = rms_coverage(counts['S']/5.0)
+            counts['solid_angle'] = np.count_nonzero(~np.isnan(rms_data))*self.pix_size**2*(np.pi/180)**2
 
             # Plot rms coverage
             plt.plot(rms_range, coverage, linewidth=2, color='k')
@@ -158,27 +163,30 @@ class Catalog:
             plt.close()
 
         # Save diff number counts to pickle file
-        data = S, dS, self.dN, solid_angle
-        if not os.path.exists(os.path.join(self.dirname,'pickles')):
-            os.mkdir(os.path.join(self.dirname,'pickles'))
-        helpers.pickle_to_file(data, os.path.join(self.dirname, 'pickles', self.cat_name+'_diff_counts.pkl'))
+        with open(os.path.join(self.dirname, self.cat_name+'_diff_counts.json'), 'w') as outfile:
+            json.dump(counts,outfile,
+                      indent=4, sort_keys=True,
+                      separators=(',', ': '),
+                      ensure_ascii=False,
+                      cls=NumpyEncoder)
 
-        self.dN = self.dN/count_correction
-        plt.errorbar(S, S**(5/2)*self.dN/dS/solid_angle,
-                     yerr=S**(5/2)*np.sqrt(self.dN)/dS/solid_angle,
+        counts['dN'] = counts['dN']/count_correction
+        plt.errorbar(counts['S'], counts['S']**(5/2)*counts['dN']/counts['dS']/counts['solid_angle'],
+                     yerr=counts['S']**(5/2)*np.sqrt(counts['dN'])/counts['dS']/counts['solid_angle'],
                      fmt='o', color='k', label='Catalog')
 
         # Get differential number counts from SKADS and plot
         path = Path(__file__).parent / 'parsets/intflux_SKADS.pkl'
         intflux = helpers.pickle_from_file(path)
-        SKADS_total_flux = 10**intflux
+        SKADS = {}
+        SKADS['total_flux']= 10**intflux
 
-        SKADS_dN, SKADS_edges = np.histogram(SKADS_total_flux, bins=self.edges)
-        SKADS_dS = np.diff(SKADS_edges)
-        SKADS_angle = 10.0**2*(np.pi/180)**2
+        SKADS['dN'], edges = np.histogram(SKADS['total_flux'], bins=self.edges)
+        SKADS['dS'] = np.diff(edges)
+        SKADS['solid_angle'] = 10.0**2*(np.pi/180)**2
 
-        plt.errorbar(S, S**(5/2)*SKADS_dN/SKADS_dS/SKADS_angle,
-                    yerr=S**(5/2)*np.sqrt(SKADS_dN)/SKADS_dS/SKADS_angle,
+        plt.errorbar(counts['S'], counts['S']**(5/2)*SKADS['dN']/SKADS['dS']/SKADS['solid_angle'],
+                    yerr=counts['S']**(5/2)*np.sqrt(SKADS['dN'])/SKADS['dS']/SKADS['solid_angle'],
                     fmt=':.', color='r', lw=0.5, label='SKADS Simulation')
 
         plt.xscale('log')
