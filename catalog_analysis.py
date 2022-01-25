@@ -109,17 +109,10 @@ class Catalog:
         flux_col -- Which table column to use for flux, should be the same
                     as the one used to define the bins
         '''
-        # Correct fluxes for primary beam pattern
-        source_coord = SkyCoord(self.table['RA'], self.table['DEC'], unit='deg')
-        offsets = source_coord.separation(self.center).deg
-        flux_corr = helpers.flux_correction(offsets, self.freq, self.dfreq, 0.8)
-
-        corrected_flux = self.table[flux_col] / flux_corr
-
         counts = {}
 
-        bin_means = [np.mean(corrected_flux[np.logical_and(corrected_flux > self.edges[i],
-                             corrected_flux < self.edges[i+1])]) for i in range(len(self.edges)-1)]
+        bin_means = [np.mean(self.table[flux_col][np.logical_and(self.table[flux_col] > self.edges[i],
+                             self.table[flux_col] < self.edges[i+1])]) for i in range(len(self.edges)-1)]
         counts['solid_angle'] = self.pix_area*self.pix_size**2*(np.pi/180)**2
         counts['dN'] = self.dN
         counts['dS'] = np.diff(self.edges)

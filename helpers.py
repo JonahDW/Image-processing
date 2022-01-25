@@ -40,44 +40,6 @@ def open_fits_casa(file):
 
     return imagedata
 
-def meerkat_lpb(beam_fwhm, b, freq, offset):
-    '''
-    MeerKAT L-band primary beam from Mauch et al 2019
-
-    Keyword arguments:
-    a (float) -- Constant scaling for the angle (in degrees)
-    b (float) -- Constant scaling for the ratio offset/angle
-    freq (float) -- Central frequency in GHz
-    offset (array) -- Offsets for which to calculate the beam amplitude
-    '''
-    theta_beam = beam_fwhm*(1.5/freq)
-    x = offset/theta_beam
-    a_beam = (np.cos(b*np.pi*x)/(1-4*(b*x)**2))**2
-
-    return a_beam
-
-def flux_correction(center_dist, freq, dfreq, alpha):
-    # Correct flux modified beam pattern induced by spectral shape
-    meerkat_beam_fwhm = 57.5/60 #degrees
-    freqs = np.linspace(freq-dfreq/2,freq+dfreq/2,100)/1e3
-    flux = freqs**(-alpha)
-
-    ref_beam = meerkat_lpb(meerkat_beam_fwhm, 1.189, freqs, 0)
-    ref_flux = np.trapz(flux*ref_beam, freqs)
-
-    total_flux = []
-    attenuation = []
-    for offset in center_dist:
-        beam = meerkat_lpb(meerkat_beam_fwhm, 1.189, freqs, offset)
-        total_flux.append(np.trapz(flux*beam, freqs)/ref_flux)
-
-        beam_cen = meerkat_lpb(meerkat_beam_fwhm, 1.189, freq/1e3, offset)
-        attenuation.append(beam_cen)
-
-    correction = np.array(total_flux)/np.array(attenuation)
-
-    return correction
-
 def make_header(catheader):
     """
     generates a header structure for WCS 
