@@ -37,7 +37,6 @@ class Catalog:
         # Parse meta
         header = self.table.meta
         if not stacked_cat:
-            self.obj_name = header['OBJECT'].replace("'","")
             self.pix_area = np.pi*float(header['AXIS1'])*float(header['AXIS2'])/4
             self.pix_size = float(max(header['CDELT1'],header['CDELT2']))
             self.bmaj = float(header['SF_BMAJ'])
@@ -72,9 +71,10 @@ class Catalog:
         self.dN, self.edges = np.histogram(self.table[flux_col], bins=log_bin)
 
         # Remove high flux bins starting from the first empty bin
-        cutoff_high = np.where(self.dN[int(nbins/2):] == 0)[0][0] + int(nbins/2)
-        self.edges = self.edges[:cutoff_high+1]
-        self.dN = self.dN[:cutoff_high]
+        if any(self.dN[int(nbins/2):] == 0):
+            cutoff_high = np.where(self.dN[int(nbins/2):] == 0)[0][0] + int(nbins/2)
+            self.edges = self.edges[:cutoff_high+1]
+            self.dN = self.dN[:cutoff_high]
 
     def plot_number_counts(self, fancy, dpi):
         '''

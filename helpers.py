@@ -34,9 +34,8 @@ def open_fits_casa(file):
         image.putmask(False)
         image.tofits('temp.fits', velocity=False)
         imagedata = fits.open('temp.fits')
-
-    # Clean up
-    os.system('rm temp.fits')
+        # Clean up
+        os.system('rm temp.fits')
 
     return imagedata
 

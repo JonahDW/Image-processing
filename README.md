@@ -32,7 +32,7 @@ Will perform sourcefinding on the image `myimage.image` and produce both a fits 
 ```
 usage: sourcefinding.py [-h] [-o OUTPUT_FORMAT [OUTPUT_FORMAT ...]] [-s SIZE]
                         [--plot [PLOT]] [--spectral_index [SPECTRAL_INDEX]]
-                        [--survey SURVEY]
+                        [--survey SURVEY] [--redo_catalog REDO_CATALOG]
                         mode image
 
 positional arguments:
@@ -63,6 +63,9 @@ optional arguments:
                         specified spectral index image. Can be FITS or CASA
                         format. (default = do not measure spectral indices).
   --survey SURVEY       Name of the survey to be used in source ids.
+  --redo_catalog REDO_CATALOG
+                        Specify catalog file if you want some part of the
+                        process to be redone, but want to skip sourcefinding
 ```
 
 ## source_catalogue_crusher.py

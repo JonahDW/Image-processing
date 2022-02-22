@@ -87,12 +87,30 @@ def run_bdsf(image, output_dir, argfile, output_format):
 
     return outcat, img
 
+def fake_run_bdsf(image, catalog_file):
+    '''
+    Fake run PyBDSF on an image, only getting image parameters
+
+    Keyword arguments:
+    image -- Name of image
+    argfile -- Input json file containing arguments
+               for bdsf functions
+    '''
+    img = bdsf.process_image(image, advanced_opts=True,
+                             stop_at='read')
+
+    return catalog_file, img
+
 def read_alpha(inpimage, alpha_image, catalog, regions):
     '''
     Determine spectral indices of the sources
     '''
     weight = helpers.open_fits_casa(inpimage)
     alpha = helpers.open_fits_casa(alpha_image)
+
+    # Remove degenerate axes if any
+    alpha_image = np.squeeze(alpha[0].data)
+    weight_image = np.squeeze(weight[0].data)
 
     # Get WCS from header and drop freq and stoke axes
     alpha_wcs = WCS(alpha[0].header, naxis=2)
@@ -101,9 +119,8 @@ def read_alpha(inpimage, alpha_image, catalog, regions):
     weight_wcs = WCS(weight[0].header, naxis=2)
     weight_regions = [region.to_pixel(weight_wcs) for region in regions]
 
-    alpha_list, alpha_err_list = helpers.measure_image_regions(alpha_regions, 
-                                                               alpha[0].data[0,0,:,:], 
-                                                               weight_image=weight[0].data[0,0,:,:],
+    alpha_list, alpha_err_list = helpers.measure_image_regions(alpha_regions, alpha_image,
+                                                               weight_image=weight_image,
                                                                weight_regions=weight_regions)
 
     a = Column(alpha_list, name='Spectral_index')
@@ -120,7 +137,6 @@ def transform_cat(catalog, survey_name, img, argfile):
 
     pointing_center = SkyCoord(float(header['CRVAL1'])*u.degree,
                                float(header['CRVAL2'])*u.degree)
-    pointing_name = ['PT-'+header['OBJECT'].replace("'","")] * len(catalog)
 
     source_coord = SkyCoord([source['RA'] for source in catalog],
                             [source['DEC'] for source in catalog],
@@ -144,12 +160,16 @@ def transform_cat(catalog, survey_name, img, argfile):
     quality_flag = [1] * len(catalog)
 
     # Add columns at appropriate indices
-    col_a = Column(pointing_name, name='Pointing_id')
-    col_b = Column(ids, name='Source_name')
-    col_c = Column(sep, name='Sep_PC')
-    col_d = Column(quality_flag, name='Quality_flag')
-    catalog.add_columns([col_a, col_b, col_c, col_d],
-                         indexes=[0,0,6,-1])
+    col_a = Column(ids, name='Source_name')
+    col_b = Column(sep, name='Sep_PC')
+    col_c = Column(quality_flag, name='Quality_flag')
+    catalog.add_columns([col_a, col_b, col_c],
+                         indexes=[0,6,-1])
+
+    # Add identifier if present in the header
+    if 'OBJECT' in header:
+        pointing_name = ['PT-'+header['OBJECT'].replace("'","")] * len(catalog)
+        catalog.add_column(pointing_name, name='Pointing_id', index=0)
 
     # Update catalog meta
     catalog.meta['comments'] = catalog.meta['comments'][:2]
@@ -239,6 +259,7 @@ def main():
     output_format = args.output_format
     spectral_index = args.spectral_index
     survey = args.survey
+    redo_catalog = args.redo_catalog
 
     if mode.lower() in 'cataloging':
         bdsf_args = 'parsets/bdsf_args_cat.json'
@@ -257,7 +278,11 @@ def main():
     if output_format is None:
         output_format = ['fits:srl']
 
-    outcat, img = run_bdsf(inpimage, output_dir, argfile=bdsf_args, output_format=output_format)
+    if redo_catalog:
+        print(f'Using previously generated catalog and skipping sourcefinding')
+        outcat, img = fake_run_bdsf(inpimage, redo_catalog)
+    else:
+        outcat, img = run_bdsf(inpimage, output_dir, argfile=bdsf_args, output_format=output_format)
 
     if not outcat:
         print('No FITS catalog generated, no further operations are performed')
@@ -320,6 +345,9 @@ def new_argument_parser():
                                 (default = do not measure spectral indices).""")
     parser.add_argument("--survey", default=None,
                         help="Name of the survey to be used in source ids.")
+    parser.add_argument("--redo_catalog", default=None,
+                        help="""Specify catalog file if you want some part of the process
+                                to be redone, but want to skip sourcefinding""")
     return parser
 
 if __name__ == '__main__':
