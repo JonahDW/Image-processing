@@ -15,8 +15,6 @@ from pathlib import Path
 from argparse import ArgumentParser
 from numpyencoder import NumpyEncoder
 
-import matplotlib
-matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from matplotlib.patches import Ellipse
 
@@ -201,30 +199,11 @@ class Catalog:
         '''
         def isresolved(catalog, bmaj, bmin):
             # Check if this source is resolved (>2.33sigma beam; 98% confidence)
-            sizeerror = size_error_condon(catalog, bmaj, bmin)
-            majcompare = bmaj+(2.33*sizeerror[0])
-            mincompare = bmin+(2.33*sizeerror[1])
+            majcompare = bmaj+(2.33*catalog['E_Maj'])#sizeerror[0])
+            mincompare = bmin+(2.33*catalog['E_Min'])#sizeerror[1])
 
             resolved_idx = catalog['Maj'] > majcompare
             return resolved_idx
-
-        def size_error_condon(catalog, beam_maj, beam_min):
-            # Implement errors for elliptical gaussians in the presence of correlated noise
-            # as per Condon (1998), MNRAS.
-            ncorr = beam_maj*beam_min
-
-            rho_maj = ((catalog['Maj']*catalog['Min'])/(4*ncorr)
-                       *(1 + (ncorr/catalog['Maj'])**2)**2.5
-                       *(1 + (ncorr/catalog['Min'])**2)**0.5
-                       *(catalog['Peak_flux']/catalog['Isl_rms'])**2)
-            rho_min = ((catalog['Maj']*catalog['Min'])/(4*ncorr)
-                       *(1 + ncorr/(catalog['Maj'])**2)**0.5
-                       *(1 + ncorr/(catalog['Min'])**2)**2.5
-                       *(catalog['Peak_flux']/catalog['Isl_rms'])**2)
-            majerr = np.sqrt(2*(catalog['Maj']/rho_maj)**2 + (0.02*beam_maj)**2)
-            minerr = np.sqrt(2*(catalog['Min']/rho_min)**2 + (0.02*beam_min)**2)
-
-            return majerr, minerr
 
         if stacked_cat:
             resolved_idx = self.table['Resolved']

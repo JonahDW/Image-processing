@@ -82,6 +82,7 @@ def main():
     doselectonvalue            = opts.doselectonvalue
     doselectonoperation        = opts.doselectonoperation
     doselectonsameidx          = opts.doselectonsameidx
+    invertselection            = opts.invertselection
     #
     # --------------------------------------------------------------------------
     # --------------------------------------------------------------------------
@@ -353,6 +354,9 @@ def main():
                 outputfilename = outputfilename+'.FITS'
 
             # convert bool array into integer array
+            if invertselection:
+                print('Inverting selection')
+                total_selection = np.invert(total_selection)
             new_Q_select   = total_selection.astype(dtype=int)
 
             #
@@ -421,6 +425,9 @@ def new_argument_parser():
 
     parser.add_option('--DO_SELECT_VALUE', dest='doselectonvalue',type=str, default='',
                       help='Input value of selection')
+
+    parser.add_option('--INVERT_SELECTION', dest='invertselection',action='store_true',
+                      help='Invert the selection final selection')
 
     parser.add_option('--KVISANNOUTPUT', dest='kvisoutputfilename', type=str,default='',
                       help='KVIS annotation outputfile name e.g. CATALOUGE.ann')

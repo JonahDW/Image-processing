@@ -67,6 +67,24 @@ def make_header(catheader):
 
     return wcsheader
 
+def size_error_condon(catalog, beam_maj, beam_min):
+    # Implement errors for elliptical gaussians in the presence of correlated noise
+    # as per Condon (1998), MNRAS.
+    ncorr = beam_maj*beam_min
+
+    rho_maj = ((catalog['Maj']*catalog['Min'])/(4*ncorr)
+               *(1 + (ncorr/catalog['Maj'])**2)**2.5
+               *(1 + (ncorr/catalog['Min'])**2)**0.5
+               *(catalog['Peak_flux']/catalog['Isl_rms'])**2)
+    rho_min = ((catalog['Maj']*catalog['Min'])/(4*ncorr)
+               *(1 + ncorr/(catalog['Maj'])**2)**0.5
+               *(1 + ncorr/(catalog['Min'])**2)**2.5
+               *(catalog['Peak_flux']/catalog['Isl_rms'])**2)
+    majerr = np.sqrt(2*(catalog['Maj']/rho_maj)**2 + (0.02*beam_maj)**2)
+    minerr = np.sqrt(2*(catalog['Min']/rho_min)**2 + (0.02*beam_min)**2)
+
+    return majerr, minerr
+
 def get_properties(identity, ra_center, dec_center):
     '''
     Get the beam and frequency of a given survey. As for some surveys
