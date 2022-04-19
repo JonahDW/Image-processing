@@ -233,7 +233,6 @@ class Pointing:
         # HRK
         self.header = catalog.meta
 
-        self.telescope = header['SF_TELE'].replace("'","")
         self.BMaj = float(header['SF_BMAJ'])*3600 #arcsec
         self.BMin = float(header['SF_BMIN'])*3600 #arcsec
         self.BPA = float(header['SF_BPA'])
@@ -255,6 +254,11 @@ class Pointing:
             self.name = header['OBJECT'].replace("'","")
         except KeyError:
             self.name = os.path.basename(filename).split('.')[0]
+
+        try:
+            self.telescope = header['SF_TELE'].replace("'","")
+        except KeyError:
+            self.telescope = os.path.basename(filename).split('.')[0]
 
     def query_NVSS(self):
         '''
