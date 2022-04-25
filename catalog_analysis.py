@@ -51,8 +51,10 @@ class Catalog:
             self.center = SkyCoord(float(header['CRVAL1'])*u.degree,
                                    float(header['CRVAL2'])*u.degree)
 
+        # Initialize empty values
         self.dN = None
         self.edges = None
+        self.npix = None
 
     def get_flux_bins(self, flux_col, nbins):
         '''
@@ -60,7 +62,7 @@ class Catalog:
 
         Keyword arguments:
         flux_col -- Which table column to use for flux
-        nbins -- Number of bins
+        nbins    -- Number of bins
         '''
         f_low = np.min(self.table[flux_col])
         f_high = np.max(self.table[flux_col])
@@ -97,15 +99,16 @@ class Catalog:
         plt.savefig(os.path.join(self.dirname,self.cat_name+'_number_counts.png'), dpi=dpi)
         plt.close()
 
-    def plot_diff_number_counts(self, flux_col, fancy, dpi, rms_image=None, completeness=None):
+    def plot_diff_number_counts(self, flux_col, fancy, dpi, rms_coverage=None, completeness=None):
         '''
         Compute and plot differential number counts
         input RMS image is used to account for sky coverage
 
         Keyword arguments:
-        rms_image -- Input RMS image
-        flux_col -- Which table column to use for flux, should be the same
-                    as the one used to define the bins
+        flux_col     -- Which table column to use for flux, should be the same
+                        as the one used to define the bins
+        rms_coverage -- Input rms coverage function
+        completeness -- File to correct for completeness
         '''
         counts = {}
 
@@ -119,39 +122,16 @@ class Catalog:
         count_correction = 1
         if completeness:
             # Get data from specified file
-            data = helpers.pickle_from_file(completeness)
-            flux_means = np.array([(data[0][i]+data[0][i+1])/2 for i in range(len(data[0])-1)])
+            with open(completeness, 'r') as infile:
+                data = json.load(infile)
+            flux_means = np.array([(data['flux_bins'][i]+data['flux_bins'][i+1])/2 for i in range(len(data['flux_bins'])-1)])
 
-            comp_frac = interp1d(flux_means, np.mean(data[1], axis=0), bounds_error=False, fill_value=(0,1))
+            comp_frac = interp1d(flux_means, np.mean(data['detected_fraction'], axis=0), bounds_error=False, fill_value=(0,1))
             count_correction = comp_frac(counts['S'])
 
-        if rms_image:
-            image = fits.open(rms_image)[0]
-            rms_data = image.data.flatten()
-
-            rms_range = np.logspace(np.log10(np.nanmin(rms_data)), np.log10(np.nanmax(rms_data)), 100)
-            coverage = [np.sum([rms_data < rms])/np.count_nonzero(~np.isnan(rms_data)) for rms in rms_range]
-
-            # Define a splin and interpolate the values
-            rms_coverage = interp1d(rms_range, coverage, fill_value='extrapolate')
+        if rms_coverage:
             count_correction = rms_coverage(counts['S']/5.0)
-            counts['solid_angle'] = np.count_nonzero(~np.isnan(rms_data))*self.pix_size**2*(np.pi/180)**2
-
-            # Plot rms coverage
-            plt.plot(rms_range, coverage, linewidth=2, color='k')
-            plt.fill_between(rms_range, 0, coverage, color='k', alpha=0.2)
-
-            plt.xscale('log')
-            plt.autoscale(enable=True, axis='x', tight=True)
-
-            if fancy:
-                plt.xlabel('$\\sigma$ (Jy/beam)')
-            else:
-                plt.xlabel('RMS (Jy/beam)')
-            plt.ylabel('Coverage')
-
-            plt.savefig(os.path.join(self.dirname, self.cat_name+'_rms_coverage.png'), dpi=300)
-            plt.close()
+            counts['solid_angle'] = self.npix*self.pix_size**2*(np.pi/180)**2
 
         # Save diff number counts to pickle file
         with open(os.path.join(self.dirname, self.cat_name+'_diff_counts.json'), 'w') as outfile:
@@ -197,10 +177,29 @@ class Catalog:
         '''
         Plot fraction of resolved sources
         '''
+        def size_error_condon(catalog, beam_maj, beam_min):
+            # Implement errors for elliptical gaussians in the presence of correlated noise
+            # as per Condon (1998), MNRAS.
+            ncorr = beam_maj*beam_min
+
+            rho_maj = ((catalog['Maj']*catalog['Min'])/(4*ncorr)
+                       *(1 + (ncorr/catalog['Maj'])**2)**2.5
+                       *(1 + (ncorr/catalog['Min'])**2)**0.5
+                       *(catalog['Peak_flux']/catalog['Isl_rms'])**2)
+            rho_min = ((catalog['Maj']*catalog['Min'])/(4*ncorr)
+                       *(1 + ncorr/(catalog['Maj'])**2)**0.5
+                       *(1 + ncorr/(catalog['Min'])**2)**2.5
+                       *(catalog['Peak_flux']/catalog['Isl_rms'])**2)
+            majerr = np.sqrt(2*(catalog['Maj']/rho_maj)**2 + (0.02*beam_maj)**2)
+            minerr = np.sqrt(2*(catalog['Min']/rho_min)**2 + (0.02*beam_min)**2)
+
+            return majerr, minerr
+
         def isresolved(catalog, bmaj, bmin):
             # Check if this source is resolved (>2.33sigma beam; 98% confidence)
-            majcompare = bmaj+(2.33*catalog['E_Maj'])#sizeerror[0])
-            mincompare = bmin+(2.33*catalog['E_Min'])#sizeerror[1])
+            sizeerror = size_error_condon(catalog, bmaj, bmin)
+            majcompare = bmaj+2.33*sizeerror[0]
+            mincompare = bmin+2.33*sizeerror[1]
 
             resolved_idx = catalog['Maj'] > majcompare
             return resolved_idx
@@ -244,6 +243,73 @@ class Catalog:
 
         return resolved_idx
 
+    def rms_statistics(self, rms_image, fancy):
+        '''
+        Determine radial profile and coverage from rms image
+
+        Keyword arguments:
+        rms_image -- Filename of rms image
+        '''
+        image = fits.open(rms_image)[0]
+
+        # Determine radial profile
+        filename = os.path.join(self.dirname, self.cat_name+'_rms_radial.json')
+
+        if os.path.exists(filename):
+            with open(filename, 'r') as infile:
+                radialprofile = json.load(infile)
+        else:
+            radialprofile = {}
+            center = (image.header['CRPIX1'],image.header['CRPIX2'])
+            data = np.squeeze(image.data)
+
+            y, x = np.indices((data.shape))
+            r = np.sqrt((x - center[0])**2 + (y - center[1])**2)
+            r = r.astype(int)
+
+            r_values, indices, inverse = np.unique(r.ravel(), return_index=True, return_inverse=True)
+            rms = np.array([np.median(data.ravel()[inverse == r]) for r in r_values])
+
+            radialprofile['dist'] = r_values*max(image.header['CDELT1'],image.header['CDELT2'])
+            radialprofile['rms'] = rms
+
+            with open(filename, 'w') as outfile:
+                json.dump(radialprofile,outfile,
+                          indent=4, sort_keys=True,
+                          separators=(',', ': '),
+                          ensure_ascii=False,
+                          cls=NumpyEncoder)
+
+        radial_profile = interp1d(radialprofile['dist'], radialprofile['rms']/np.nanmin(radialprofile['rms']), fill_value=1)
+
+        # Determine coverage
+        rms_data = image.data.flatten()
+
+        rms_range = np.logspace(np.log10(np.nanmin(rms_data)), np.log10(np.nanmax(rms_data)), 100)
+        coverage = [np.sum([rms_data < rms])/np.count_nonzero(~np.isnan(rms_data)) for rms in rms_range]
+
+        # Define a splin and interpolate the values
+        rms_coverage = interp1d(rms_range, coverage, fill_value='extrapolate')
+        self.npix = np.count_nonzero(~np.isnan(rms_data))
+
+        # Plot rms coverage
+        plt.plot(rms_range, coverage, linewidth=2, color='k')
+        plt.fill_between(rms_range, 0, coverage, color='k', alpha=0.2)
+
+        plt.xscale('log')
+        plt.autoscale(enable=True, axis='x', tight=True)
+
+        if fancy:
+            plt.xlabel('$\\sigma$ (Jy/beam)')
+        else:
+            plt.xlabel('RMS (Jy/beam)')
+        plt.ylabel('Coverage')
+
+        plt.savefig(os.path.join(self.dirname, self.cat_name+'_rms_coverage.png'), dpi=300)
+        plt.close()
+
+        return radial_profile, rms_coverage
+
 def main():
     parser = new_argument_parser()
     args = parser.parse_args()
@@ -251,6 +317,7 @@ def main():
     catalog_file = args.catalog
     rms_image = args.rms_image
     comp_corr = args.comp_corr
+    flux_col = args.flux_col
     stacked_cat = args.stacked_catalog
     fancy = args.fancy
     dpi = args.dpi
@@ -260,14 +327,16 @@ def main():
         plt.rc('text', usetex=True)
         plt.rcParams.update({'font.size': 14})
 
-    flux_col = 'Total_flux'
     catalog = Catalog(catalog_file, stacked_cat)
     catalog.get_flux_bins(flux_col, nbins=50)
 
     catalog.plot_number_counts(fancy, dpi)
 
-    if rms_image or comp_corr:
-        catalog.plot_diff_number_counts(flux_col, fancy, dpi, rms_image, comp_corr)
+    if rms_image:
+        radial_profile, rms_coverage = catalog.rms_statistics(rms_image, fancy)
+        catalog.plot_diff_number_counts(flux_col, fancy, dpi, rms_coverage=rms_coverage)
+    if comp_corr:
+        catalog.plot_diff_number_counts(flux_col, fancy, dpi, completeness=comp_corr)
 
     resolved = catalog.plot_resolved_fraction(stacked_cat, fancy, dpi)
     if not stacked_cat:
@@ -285,10 +354,13 @@ def new_argument_parser():
                                 plot. In the absence of a completeness correction file,
                                 will also be used to correct for completeness.""")
     parser.add_argument('-c', '--comp_corr', default=None,
-                        help="""Specify input pickle file containing completeness
+                        help="""Specify input json file containing completeness
                                 fractions for correcting differential number counts.
                                 the file is assumed to contain at least the arrays of 
                                 flux bins, completeness fraction.""")
+    parser.add_argument('--flux_col', default='Total_flux',
+                        help="""Name of flux column to use for analysis
+                                (default = Total_flux).""")
     parser.add_argument('--stacked_catalog', action='store_true',
                         help="""Indicate if catalog is built up from multiple catalogs,
                                 for example with combine_catalogs script.""")

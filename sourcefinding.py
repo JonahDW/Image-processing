@@ -123,7 +123,7 @@ def read_alpha(inpimage, alpha_image, catalog, regions):
                                                                weight_image=weight_image,
                                                                weight_regions=weight_regions)
 
-    a = Column(alpha_list, name='Spectral_index')
+    a = Column(-1*np.asarray(alpha_list), name='Spectral_index')
     b = Column(alpha_err_list, name='E_Spectral_index')
     catalog.add_columns([a,b], indexes=[10,10]) 
 

@@ -216,7 +216,7 @@ class ExternalCatalog:
 
 class Pointing:
 
-    def __init__(self, catalog, filename):
+    def __init__(self, catalog, filename, ra_center=None, dec_center=None, fov=None):
         self.dirname = os.path.dirname(filename)
 
         self.cat = catalog[catalog['Quality_flag'] == 1]
@@ -228,31 +228,36 @@ class Pointing:
         self.sources = [SourceEllipse(source, columns) for source in self.cat]
 
         # Parse meta
-        header = catalog.meta
-
-        # HRK
         self.header = catalog.meta
 
-        self.telescope = header['SF_TELE'].replace("'","")
-        self.BMaj = float(header['SF_BMAJ'])*3600 #arcsec
-        self.BMin = float(header['SF_BMIN'])*3600 #arcsec
-        self.BPA = float(header['SF_BPA'])
+        self.telescope = self.header['SF_TELE'].replace("'","")
+        self.BMaj = float(self.header['SF_BMAJ'])*3600 #arcsec
+        self.BMin = float(self.header['SF_BMIN'])*3600 #arcsec
+        self.BPA = float(self.header['SF_BPA'])
 
         # Determine frequency axis:
         for i in range(1,5):
-            if 'FREQ' in header['CTYPE'+str(i)]:
+            if 'FREQ' in self.header['CTYPE'+str(i)]:
                 freq_idx = i
                 break
-        self.freq = float(header['CRVAL'+str(freq_idx)])/1e6 #MHz
-        self.dfreq = float(header['CDELT'+str(freq_idx)])/1e6 #MHz
+        self.freq = float(self.header['CRVAL'+str(freq_idx)])/1e6 #MHz
+        self.dfreq = float(self.header['CDELT'+str(freq_idx)])/1e6 #MHz
 
-        self.center = SkyCoord(float(header['CRVAL1'])*u.degree,
-                               float(header['CRVAL2'])*u.degree)
-        dec_fov = abs(float(header['CDELT1']))*float(header['CRPIX1'])*2
-        self.fov = dec_fov/np.cos(self.center.dec.rad) * u.degree
+        # Determine center and fov, either from input or header
+        if ra_center is None:
+            self.center = SkyCoord(float(self.header['CRVAL1'])*u.degree,
+                                   float(self.header['CRVAL2'])*u.degree)
+        else:
+            self.center = SkyCoord(ra_center*u.degree,dec_center*u.degree)
+
+        if fov is None:
+            dec_fov = abs(float(self.header['CDELT1']))*float(self.header['CRPIX1'])*2
+            self.fov = dec_fov/np.cos(self.center.dec.rad) * u.degree
+        else:
+            self.fov = fov*u.degree
 
         try:
-            self.name = header['OBJECT'].replace("'","")
+            self.name = self.header['OBJECT'].replace("'","")
         except KeyError:
             self.name = os.path.basename(filename).split('.')[0]
 
@@ -658,11 +663,20 @@ def plot_fluxes(match_info, pointing, ext, fluxtype, flux, dpi):
     fig, ax = plt.subplots()
 
     # Log scale before plotting
-    ax.set_yscale('log')
+    if np.log10(flux_matches['dFlux'].max()/flux_matches['dFlux'].min()) > 2:
+        ax.set_yscale('log')
+
     sc = ax.scatter(flux_matches['separation'], 
                     flux_matches['dFlux'],
                     marker='.', s=5,
                     c=flux_matches['n_matches'], cmap=cmap, norm=norm)
+
+    # Determine running median
+    medians_x, medians_y, stds_y= helpers.runningmedian(np.array(flux_matches['separation']),
+                                                        np.array(flux_matches['dFlux']), 
+                                                        window=int(len(flux_matches['dFlux'])/5), 
+                                                        stepsize=1)
+    ax.plot(medians_x, medians_y, color='k')
 
     # Add colorbar to set matches
     divider = make_axes_locatable(ax)
@@ -737,13 +751,16 @@ def main():
     output = args.output
     annotate = args.annotate
     annotate_nonmatched = args.annotate_nonmatched
+    ra_center = args.ra_center
+    dec_center = args.dec_center
+    fov = args.fov
 
     sigma_extent   = args.match_sigma_extent
     search_dist    = args.search_dist/3600 # to degrees
     source_overlap = args.source_overlap_percent
 
     pointing_cat = Table.read(pointing)
-    pointing = Pointing(pointing_cat, pointing)
+    pointing = Pointing(pointing_cat, pointing, ra_center, dec_center, fov)
 
     if ext_cat == 'NVSS':
         ext_table = pointing.query_NVSS()
@@ -763,7 +780,7 @@ def main():
     elif os.path.exists(ext_cat):
         ext_table = Table.read(ext_cat)
         if 'bdsfcat' in ext_cat:
-            ext_catalog = Pointing(ext_table, ext_cat)
+            ext_catalog = Pointing(ext_table, ext_cat, ra_center, dec_center, fov)
         else:
             ext_catalog = ExternalCatalog(ext_cat, ext_table, pointing.center)
     else:
@@ -852,6 +869,15 @@ def new_argument_parser():
     parser.add_argument("--annotate_nonmatched", action='store_true', default=False,
                         help="""Annotation file will include the non-macthed catalogue sources 
                                 (default = don't show).""")
+    parser.add_argument("--ra_center", default=None, type=float,
+                        help="""Assumed centre (RA, degrees) for matching to external catalogues.
+                                (default = use CRVAL1/2 from image header).""")
+    parser.add_argument("--dec_center", default=None, type=float,
+                        help="""Assumed centre (DEC, degrees) for matching to external catalogues.
+                                (default = use CRVAL1/2 from image header). """)
+    parser.add_argument("--fov", default=None, type=float,
+                        help="""Assumed FOV (degrees) for matching to external catalogues.
+                                (default = use FOV of input image).""")        
     parser.add_argument('-d', '--dpi', default=300,
                         help="""DPI of the output images (default = 300).""")
 

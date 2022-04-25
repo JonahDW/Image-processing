@@ -67,24 +67,6 @@ def make_header(catheader):
 
     return wcsheader
 
-def size_error_condon(catalog, beam_maj, beam_min):
-    # Implement errors for elliptical gaussians in the presence of correlated noise
-    # as per Condon (1998), MNRAS.
-    ncorr = beam_maj*beam_min
-
-    rho_maj = ((catalog['Maj']*catalog['Min'])/(4*ncorr)
-               *(1 + (ncorr/catalog['Maj'])**2)**2.5
-               *(1 + (ncorr/catalog['Min'])**2)**0.5
-               *(catalog['Peak_flux']/catalog['Isl_rms'])**2)
-    rho_min = ((catalog['Maj']*catalog['Min'])/(4*ncorr)
-               *(1 + ncorr/(catalog['Maj'])**2)**0.5
-               *(1 + ncorr/(catalog['Min'])**2)**2.5
-               *(catalog['Peak_flux']/catalog['Isl_rms'])**2)
-    majerr = np.sqrt(2*(catalog['Maj']/rho_maj)**2 + (0.02*beam_maj)**2)
-    minerr = np.sqrt(2*(catalog['Min']/rho_min)**2 + (0.02*beam_min)**2)
-
-    return majerr, minerr
-
 def get_properties(identity, ra_center, dec_center):
     '''
     Get the beam and frequency of a given survey. As for some surveys
@@ -263,3 +245,44 @@ def ellipse_RA_check(radec):
         sys.exit(-1)
 
     return new_polygons
+
+def runningmedian(X, Y, window, stepsize):
+    """
+    Find the median for the points in a sliding window (odd number in size) 
+    as it is moved from left to right by one point at a time.
+              
+    Also find the std! 
+              
+    Keyword arguments:
+    X -- Y is ordered according to the values of this array, such that median is taken
+            over M neighbouring datapoints in X. 
+    Y -- list containing items for which a running median (in a sliding window) 
+            is to be calculated
+    window  -- number of items in window (window size) -- must be an integer > 1
+    stepsize
+
+   Note:
+     1. The median of a finite list of numbers is the "center" value when this list
+        is sorted in ascending order. 
+     2. If M is an even number the two elements in the window that
+        are close to the center are averaged to give the median (this
+        is not by definition)
+    """   
+    inds = X.argsort()
+    sorted_X = X[inds[::-1]]
+    sorted_Y = Y[inds[::-1]]
+
+    n_steps = int(len(X)/stepsize)
+
+    medians_x = []
+    medians_y = []
+    stds_y = []
+    for i in range(n_steps):
+        min_i = max(0, int(i*stepsize-window/2))
+        max_i = min(len(X), int(i*stepsize+window/2))
+
+        medians_x.append(sorted_X[int(i*stepsize)])
+        medians_y.append(np.median(sorted_Y[min_i:max_i]))
+        stds_y.append(np.std(sorted_Y[min_i:max_i]))
+
+    return np.asarray(medians_x), np.asarray(medians_y), np.asarray(stds_y)
