@@ -261,7 +261,7 @@ class Pointing:
             self.name = os.path.basename(filename).split('.')[0]
 
         try:
-            self.telescope = header['SF_TELE'].replace("'","")
+            self.telescope = self.header['SF_TELE'].replace("'","")
         except KeyError:
             self.telescope = os.path.basename(filename).split('.')[0]
 
