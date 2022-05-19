@@ -216,7 +216,7 @@ class ExternalCatalog:
 
 class Pointing:
 
-    def __init__(self, catalog, filename, ra_center=None, dec_center=None, fov=None):
+    def __init__(self, catalog, filename, survey_name=None, ra_center=None, dec_center=None, fov=None):
         self.dirname = os.path.dirname(filename)
 
         self.cat = catalog[catalog['Quality_flag'] == 1]
@@ -258,12 +258,12 @@ class Pointing:
         try:
             self.name = self.header['OBJECT'].replace("'","")
         except KeyError:
-            self.name = os.path.basename(filename).split('.')[0]
+            self.name = os.path.basename(filename).rsplit('.',1)[0]
 
-        try:
-            self.telescope = self.header['SF_TELE'].replace("'","")
-        except KeyError:
-            self.telescope = os.path.basename(filename).split('.')[0]
+        if survey_name is not None:
+            self.survey_name = survey_name
+        else:
+            self.survey_name = self.name
 
     def query_NVSS(self):
         '''
@@ -467,7 +467,7 @@ def info_match(pointing, ext, matches, fluxtype, alpha, output):
                 int_flux.append(np.sum([pointing.sources[m].IntFlux for m in match]))
 
                 flux_ratio = ext.sources[i].IntFlux/np.sum([pointing.sources[m].IntFlux for m in match])
-                match_alpha.append(np.log(flux_ratio)/np.log(pointing.freq/ext.freq))
+                match_alpha.append(np.log(flux_ratio)/np.log(ext.freq/pointing.freq))
 
                 source_coord = SkyCoord(ext.sources[i].RA, ext.sources[i].DEC, unit='deg')
                 separation.append(source_coord.separation(pointing.center).deg)
@@ -479,7 +479,7 @@ def info_match(pointing, ext, matches, fluxtype, alpha, output):
                 int_flux.append(np.sum([pointing.sources[m].PeakFlux for m in match]))
 
                 flux_ratio = ext.sources[i].PeakFlux/np.sum([pointing.sources[m].PeakFlux for m in match])
-                match_alpha.append(np.log(flux_ratio)/np.log(pointing.freq/ext.freq))
+                match_alpha.append(np.log(flux_ratio)/np.log(ext.freq/pointing.freq))
 
                 source_coord = SkyCoord(ext.sources[i].RA, ext.sources[i].DEC, unit='deg')
                 separation.append(source_coord.separation(pointing.center).deg)
@@ -496,7 +496,7 @@ def info_match(pointing, ext, matches, fluxtype, alpha, output):
     match_info['fluxes'][fluxtype]['match_alpha'] = match_alpha
 
     # Scale flux density to proper frequency
-    ext_flux_corrected = np.array(ext_flux) * (pointing.freq/ext.freq)**-alpha
+    ext_flux_corrected = np.array(ext_flux) * (pointing.freq/ext.freq)**alpha
     dFlux = np.array(int_flux)/ext_flux_corrected
 
     match_info['fluxes'][fluxtype]['alpha'] = alpha
@@ -562,9 +562,12 @@ def plot_catalog_match(pointing, ext, matches, plot, dpi):
     ax.set_ylabel('DEC (degrees)')
 
     if plot is True:
-        plt.savefig(os.path.join(pointing.dirname,f'match_{ext.name}_{pointing.name}_shapes.png'), dpi=dpi, bbox_inches='tight')
+        outfile = os.path.join(pointing.dirname,f'match_{ext.name}_{pointing.name}_shapes.png')
     else:
-        plt.savefig(plot, dpi=dpi)
+        outfile = plot
+
+    print(f"--> Saving plot of source ellipses '{outfile}'")
+    plt.savefig(astro, dpi=dpi, bbox_inches='tight')
 
     plt.close()
 
@@ -606,7 +609,7 @@ def plot_astrometrics(match_info, pointing, ext, astro, dpi):
                            angle=-pointing.BPA,
                            facecolor='none',
                            edgecolor='k',
-                           label=f'{pointing.telescope} beam')
+                           label=f'{pointing.survey_name} beam')
 
     ax.add_patch(ext_beam_ell)
     ax.add_patch(int_beam_ell)
@@ -650,9 +653,12 @@ def plot_astrometrics(match_info, pointing, ext, astro, dpi):
     ax.legend(loc='upper right')
 
     if astro is True:
-        plt.savefig(os.path.join(pointing.dirname,f'match_{ext.name}_{pointing.name}_astrometrics.png'), dpi=dpi)
+        outfile = os.path.join(pointing.dirname,f'match_{ext.name}_{pointing.name}_astrometrics.png')
     else:
-        plt.savefig(astro, dpi=dpi)
+        outfile = astro
+
+    print(f"--> Saving astrometry plot '{outfile}'")
+    plt.savefig(outfile, dpi=dpi)
     plt.close()
 
 def plot_fluxes(match_info, pointing, ext, fluxtype, flux, dpi):
@@ -696,9 +702,12 @@ def plot_fluxes(match_info, pointing, ext, fluxtype, flux, dpi):
     ax.set_ylabel(f'Flux ratio ({fluxtype} flux)')
 
     if flux is True:
-        plt.savefig(os.path.join(pointing.dirname,f'match_{ext.name}_{pointing.name}_fluxes.png'), dpi=dpi)
+        outfile = os.path.join(pointing.dirname,f'match_{ext.name}_{pointing.name}_fluxes.png')
     else:
-        plt.savefig(flux, dpi=dpi)
+        outfile = flux
+
+    print(f"--> Saving flux ratio plot '{outfile}'")
+    plt.savefig(outfile, dpi=dpi)
     plt.close()
 
 def write_to_catalog(pointing, ext, matches, match_info, fluxtype, output):
@@ -716,13 +725,15 @@ def write_to_catalog(pointing, ext, matches, match_info, fluxtype, output):
             for j in match:
                 pointing.cat[j]['idx'] = i
 
-    out = join(ext.cat, pointing.cat, keys='idx')
+    out = join(ext.cat, pointing.cat, keys='idx', table_names=[ext.name,pointing.survey_name])
 
     if output is True:
-        filename = os.path.join(pointing.dirname, f'match_{ext.name}_{pointing.name}.fits')
-        out.write(filename, overwrite=True, format='fits')
+        outfile = os.path.join(pointing.dirname, f'match_{ext.name}_{pointing.name}.fits')
     else:
-        out.write(output, overwrite=True, format='fits')
+        outfile = output
+
+    print(f"--> Saving output FITS catalog '{outfile}'")
+    out.write(outfile, overwrite=True, format='fits')
 
 def write_info(pointing, ext, match_info, output):
     """
@@ -731,6 +742,7 @@ def write_info(pointing, ext, match_info, output):
     filename = os.path.join(pointing.dirname, f'match_{ext.name}_{pointing.name}_info.json')
 
     # Write JSON file
+    print(f"--> Saving info json file '{filename}'")
     with open(filename, 'w') as outfile:
             json.dump(match_info,outfile,
                       indent=4, sort_keys=True,
@@ -753,6 +765,7 @@ def main():
     plot = args.plot
     alpha = args.alpha
     output = args.output
+    survey_name = args.survey_name
     annotate = args.annotate
     annotate_nonmatched = args.annotate_nonmatched
     ra_center = args.ra_center
@@ -764,7 +777,7 @@ def main():
     source_overlap = args.source_overlap_percent
 
     pointing_cat = Table.read(pointing)
-    pointing = Pointing(pointing_cat, pointing, ra_center, dec_center, fov)
+    pointing = Pointing(pointing_cat, pointing, survey_name, ra_center, dec_center, fov)
 
     if ext_cat == 'NVSS':
         ext_table = pointing.query_NVSS()
@@ -784,7 +797,7 @@ def main():
     elif os.path.exists(ext_cat):
         ext_table = Table.read(ext_cat)
         if 'bdsfcat' in ext_cat:
-            ext_catalog = Pointing(ext_table, ext_cat, ra_center, dec_center, fov)
+            ext_catalog = Pointing(ext_table, ext_cat, ra_center=ra_center, dec_center=dec_center, fov=fov)
         else:
             ext_catalog = ExternalCatalog(ext_cat, ext_table, pointing.center)
     else:
@@ -855,13 +868,16 @@ def new_argument_parser():
                         help="""Plot the field with the matched ellipses,
                                 optionally provide an output filename
                                 (default = don't plot the matched ellipses).""")
+    parser.add_argument("--survey_name", default=None, type=str,
+                        help="""Survey name of input catalog to use in matched catalog 
+                                columns and plots""")
     parser.add_argument("--fluxtype", default="Total",
                         help="""Whether to use Total or Peak flux for determining
                                 the flux ratio (default = Total).""")
-    parser.add_argument("--alpha", default=0.8, type=float,
+    parser.add_argument("--alpha", default=-0.8, type=float,
                         help="""The spectral slope to assume for calculating the
-                                flux ratio, where Flux_1 = Flux_2 * (freq_1/freq_2)^-alpha
-                                (default = 0.8)""")
+                                flux ratio, where Flux_1 = Flux_2 * (freq_1/freq_2)^alpha
+                                (default = -0.8)""")
     parser.add_argument("--output", nargs="?", const=True,
                         help="""Output the result of the matching into a catalog,
                                 optionally provide an output filename

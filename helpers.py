@@ -286,3 +286,22 @@ def runningmedian(X, Y, window, stepsize):
         stds_y.append(np.std(sorted_Y[min_i:max_i]))
 
     return np.asarray(medians_x), np.asarray(medians_y), np.asarray(stds_y)
+
+def id_artifacts(bright_sources, catalog):
+    '''
+    Identify artifacts near bright sources
+    '''
+    catalog_coord = SkyCoord(catalog['RA'], catalog['DEC'], unit='deg', frame='icrs')
+
+    indices = []
+    for source in bright_sources:
+        source_coord = SkyCoord(source['RA'], source['DEC'], unit='deg', frame='icrs')
+
+        d2d = source_coord.separation(catalog_coord)
+        close = d2d < 5*source['Min']*u.deg
+
+        indices.append(np.where(np.logical_and(close, catalog['Peak_flux'] < 0.1*source['Peak_flux']))[0])
+
+    indices = np.concatenate(indices)
+    unique_indices = np.unique(indices)
+    return unique_indices

@@ -76,7 +76,7 @@ class Catalog:
             self.edges = self.edges[:cutoff_high+1]
             self.dN = self.dN[:cutoff_high]
 
-    def plot_number_counts(self, fancy, dpi):
+    def plot_number_counts(self, fancy, dpi, no_plot=False):
         '''
         Plot number count bins and fit a power law
         '''
@@ -84,166 +84,26 @@ class Catalog:
         fit_edges = self.edges[cutoff_high:]
         fit_dN = self.dN[cutoff_high:]
 
-        plt.bar(self.edges[:-1], self.dN, width=np.diff(self.edges), edgecolor='k', alpha=0.5, align='edge')
-        plt.xscale('log')
-        plt.yscale('log')
-        plt.autoscale(enable=True, axis='x', tight=True)
+        if not no_plot:
+            plt.bar(self.edges[:-1], self.dN, width=np.diff(self.edges), edgecolor='k', alpha=0.5, align='edge')
+            plt.xscale('log')
+            plt.yscale('log')
+            plt.autoscale(enable=True, axis='x', tight=True)
 
-        if fancy:
-            plt.ylabel('$N$')
-            plt.xlabel('$S (\\mathrm{Jy})$')
-        else:
-            plt.ylabel('N')
-            plt.xlabel('S (Jy)')
+            if fancy:
+                plt.ylabel('$N$')
+                plt.xlabel('$S (\\mathrm{Jy})$')
+            else:
+                plt.ylabel('N')
+                plt.xlabel('S (Jy)')
 
-        plt.savefig(os.path.join(self.dirname,self.cat_name+'_number_counts.png'), dpi=dpi)
-        plt.close()
+            outfile = os.path.join(self.dirname,self.cat_name+'_number_counts.png')
+            print(f"--> Saving plot of number counts '{outfile}'")
 
-    def plot_diff_number_counts(self, flux_col, fancy, dpi, rms_coverage=None, completeness=None):
-        '''
-        Compute and plot differential number counts
-        input RMS image is used to account for sky coverage
+            plt.savefig(outfile, dpi=dpi)
+            plt.close()
 
-        Keyword arguments:
-        flux_col     -- Which table column to use for flux, should be the same
-                        as the one used to define the bins
-        rms_coverage -- Input rms coverage function
-        completeness -- File to correct for completeness
-        '''
-        counts = {}
-
-        bin_means = [np.mean(self.table[flux_col][np.logical_and(self.table[flux_col] > self.edges[i],
-                             self.table[flux_col] < self.edges[i+1])]) for i in range(len(self.edges)-1)]
-        counts['solid_angle'] = self.pix_area*self.pix_size**2*(np.pi/180)**2
-        counts['dN'] = self.dN
-        counts['dS'] = np.diff(self.edges)
-        counts['S'] = np.array(bin_means)
-
-        count_correction = 1
-        if completeness:
-            # Get data from specified file
-            with open(completeness, 'r') as infile:
-                data = json.load(infile)
-            flux_means = np.array([(data['flux_bins'][i]+data['flux_bins'][i+1])/2 for i in range(len(data['flux_bins'])-1)])
-
-            comp_frac = interp1d(flux_means, np.mean(data['detected_fraction'], axis=0), bounds_error=False, fill_value=(0,1))
-            count_correction = comp_frac(counts['S'])
-
-        if rms_coverage:
-            count_correction = rms_coverage(counts['S']/5.0)
-            counts['solid_angle'] = self.npix*self.pix_size**2*(np.pi/180)**2
-
-        # Save diff number counts to pickle file
-        with open(os.path.join(self.dirname, self.cat_name+'_diff_counts.json'), 'w') as outfile:
-            json.dump(counts,outfile,
-                      indent=4, sort_keys=True,
-                      separators=(',', ': '),
-                      ensure_ascii=False,
-                      cls=NumpyEncoder)
-
-        counts['dN'] = counts['dN']/count_correction
-        plt.errorbar(counts['S'], counts['S']**(5/2)*counts['dN']/counts['dS']/counts['solid_angle'],
-                     yerr=counts['S']**(5/2)*np.sqrt(counts['dN'])/counts['dS']/counts['solid_angle'],
-                     fmt='o', color='k', label='Catalog')
-
-        # Get differential number counts from SKADS and plot
-        path = Path(__file__).parent / 'parsets/intflux_SKADS.pkl'
-        intflux = helpers.pickle_from_file(path)
-        SKADS = {}
-        SKADS['total_flux']= 10**intflux
-
-        SKADS['dN'], edges = np.histogram(SKADS['total_flux'], bins=self.edges)
-        SKADS['dS'] = np.diff(edges)
-        SKADS['solid_angle'] = 10.0**2*(np.pi/180)**2
-
-        plt.errorbar(counts['S'], counts['S']**(5/2)*SKADS['dN']/SKADS['dS']/SKADS['solid_angle'],
-                    yerr=counts['S']**(5/2)*np.sqrt(SKADS['dN'])/SKADS['dS']/SKADS['solid_angle'],
-                    fmt=':.', color='r', lw=0.5, label='SKADS Simulation')
-
-        plt.xscale('log')
-        plt.yscale('log')
-
-        if fancy:
-            plt.ylabel('$S^{5/2}\\  \\mathrm{d}N/\\mathrm{d}S \\ (\\mathrm{Jy}^{3/2} \\mathrm{sr}^{-1})$')
-            plt.xlabel('$S (\\mathrm{Jy})$')
-        else:
-            plt.ylabel('S^5/2 dN/dS (Jy^3/2 / sr)')
-            plt.xlabel('S (Jy)')
-        plt.legend()
-        plt.savefig(os.path.join(self.dirname, self.cat_name+'_diff_counts.png'), dpi=dpi)
-        plt.close()
-
-    def plot_resolved_fraction(self, stacked_cat, fancy, dpi):
-        '''
-        Plot fraction of resolved sources
-        '''
-        def size_error_condon(catalog, beam_maj, beam_min):
-            # Implement errors for elliptical gaussians in the presence of correlated noise
-            # as per Condon (1998), MNRAS.
-            ncorr = beam_maj*beam_min
-
-            rho_maj = ((catalog['Maj']*catalog['Min'])/(4*ncorr)
-                       *(1 + (ncorr/catalog['Maj'])**2)**2.5
-                       *(1 + (ncorr/catalog['Min'])**2)**0.5
-                       *(catalog['Peak_flux']/catalog['Isl_rms'])**2)
-            rho_min = ((catalog['Maj']*catalog['Min'])/(4*ncorr)
-                       *(1 + ncorr/(catalog['Maj'])**2)**0.5
-                       *(1 + ncorr/(catalog['Min'])**2)**2.5
-                       *(catalog['Peak_flux']/catalog['Isl_rms'])**2)
-            majerr = np.sqrt(2*(catalog['Maj']/rho_maj)**2 + (0.02*beam_maj)**2)
-            minerr = np.sqrt(2*(catalog['Min']/rho_min)**2 + (0.02*beam_min)**2)
-
-            return majerr, minerr
-
-        def isresolved(catalog, bmaj, bmin):
-            # Check if this source is resolved (>2.33sigma beam; 98% confidence)
-            sizeerror = size_error_condon(catalog, bmaj, bmin)
-            majcompare = bmaj+2.33*sizeerror[0]
-            mincompare = bmin+2.33*sizeerror[1]
-
-            resolved_idx = catalog['Maj'] > majcompare
-            return resolved_idx
-
-        if stacked_cat:
-            resolved_idx = self.table['Resolved']
-        else:
-            resolved_idx = isresolved(self.table, self.bmaj, self.bmin)
-
-        resolved = self.table[resolved_idx]
-        unresolved = self.table[~resolved_idx]
-
-        # Log scale before plotting
-        plt.xscale('log')
-        plt.yscale('log')
-
-        alpha = min(1000 / (len(unresolved)+len(resolved)), 1)
-        plt.scatter(unresolved['Peak_flux']/unresolved['Isl_rms'],
-                    unresolved['Total_flux']/unresolved['Peak_flux'],
-                    color='navy', s=5, label=f'Unresolved ({len(unresolved)})',
-                    alpha=alpha)
-        plt.scatter(resolved['Peak_flux']/resolved['Isl_rms'],
-                    resolved['Total_flux']/resolved['Peak_flux'],
-                    color='crimson', s=5, label=f'Resolved ({len(resolved)})',
-                    alpha=alpha)
-
-        plt.xlim(left=4)
-
-        if fancy:
-            plt.ylabel('$S_{tot}/S_{peak}$')
-        else:
-            plt.ylabel('Total flux / Peak flux')
-        plt.xlabel('S/N')
-
-        leg = plt.legend()
-        for lh in leg.legendHandles: 
-            lh.set_alpha(1)
-
-        plt.savefig(os.path.join(self.dirname,self.cat_name+'_resolved.png'), dpi=dpi)
-        plt.close()
-
-        return resolved_idx
-
-    def rms_statistics(self, rms_image, fancy):
+    def rms_statistics(self, rms_image, fancy, no_plot=False):
         '''
         Determine radial profile and coverage from rms image
 
@@ -292,23 +152,196 @@ class Catalog:
         rms_coverage = interp1d(rms_range, coverage, fill_value='extrapolate')
         self.npix = np.count_nonzero(~np.isnan(rms_data))
 
-        # Plot rms coverage
-        plt.plot(rms_range, coverage, linewidth=2, color='k')
-        plt.fill_between(rms_range, 0, coverage, color='k', alpha=0.2)
+        if not no_plot:
+            # Plot rms coverage
+            plt.plot(rms_range, coverage, linewidth=2, color='k')
+            plt.fill_between(rms_range, 0, coverage, color='k', alpha=0.2)
 
-        plt.xscale('log')
-        plt.autoscale(enable=True, axis='x', tight=True)
+            plt.xscale('log')
+            plt.autoscale(enable=True, axis='x', tight=True)
 
-        if fancy:
-            plt.xlabel('$\\sigma$ (Jy/beam)')
-        else:
-            plt.xlabel('RMS (Jy/beam)')
-        plt.ylabel('Coverage')
+            if fancy:
+                plt.xlabel('$\\sigma$ (Jy/beam)')
+            else:
+                plt.xlabel('RMS (Jy/beam)')
+            plt.ylabel('Coverage')
 
-        plt.savefig(os.path.join(self.dirname, self.cat_name+'_rms_coverage.png'), dpi=300)
-        plt.close()
+            outfile = os.path.join(self.dirname, self.cat_name+'_rms_coverage.png')
+            print(f"--> Saving plot of rms coverage '{outfile}'")
+
+            plt.savefig(outfile, dpi=300)
+            plt.close()
 
         return radial_profile, rms_coverage
+
+    def plot_diff_number_counts(self, flux_col, fancy, dpi, rms_coverage=None, completeness=None, no_plot=False):
+        '''
+        Compute and plot differential number counts
+        input RMS image is used to account for sky coverage
+
+        Keyword arguments:
+        flux_col     -- Which table column to use for flux, should be the same
+                        as the one used to define the bins
+        rms_coverage -- Input rms coverage function
+        completeness -- File to correct for completeness
+        '''
+        counts = {}
+
+        bin_means = [np.mean(self.table[flux_col][np.logical_and(self.table[flux_col] > self.edges[i],
+                             self.table[flux_col] < self.edges[i+1])]) for i in range(len(self.edges)-1)]
+        counts['solid_angle'] = self.pix_area*self.pix_size**2*(np.pi/180)**2
+        counts['dN'] = self.dN
+        counts['dS'] = np.diff(self.edges)
+        counts['S'] = np.array(bin_means)
+
+        count_correction = 1
+        if completeness:
+            # Get data from specified file
+            with open(completeness, 'r') as infile:
+                data = json.load(infile)
+            flux_means = np.array([(data['flux_bins'][i]+data['flux_bins'][i+1])/2 for i in range(len(data['flux_bins'])-1)])
+
+            comp_frac = interp1d(flux_means, np.mean(data['detected_fraction'], axis=0), bounds_error=False, fill_value=(0,1))
+            count_correction = comp_frac(counts['S'])
+
+        if rms_coverage:
+            count_correction = rms_coverage(counts['S']/5.0)
+            counts['solid_angle'] = self.npix*self.pix_size**2*(np.pi/180)**2
+
+        # Save diff number counts to pickle file
+        filename = os.path.join(self.dirname, self.cat_name+'_diff_counts.json')
+        print(f"--> Saving json file of differential number counts '{filename}'")
+        with open(filename, 'w') as outfile:
+            json.dump(counts,outfile,
+                      indent=4, sort_keys=True,
+                      separators=(',', ': '),
+                      ensure_ascii=False,
+                      cls=NumpyEncoder)
+
+        counts['dN'] = counts['dN']/count_correction
+        plt.errorbar(counts['S'], counts['S']**(5/2)*counts['dN']/counts['dS']/counts['solid_angle'],
+                     yerr=counts['S']**(5/2)*np.sqrt(counts['dN'])/counts['dS']/counts['solid_angle'],
+                     fmt='o', color='k', label='Catalog')
+
+        # Get differential number counts from SKADS and plot
+        path = Path(__file__).parent / 'parsets/intflux_SKADS.pkl'
+        intflux = helpers.pickle_from_file(path)
+        SKADS = {}
+        SKADS['total_flux']= 10**intflux
+
+        SKADS['dN'], edges = np.histogram(SKADS['total_flux'], bins=self.edges)
+        SKADS['dS'] = np.diff(edges)
+        SKADS['solid_angle'] = 10.0**2*(np.pi/180)**2
+
+        if not no_plot:
+            plt.errorbar(counts['S'], counts['S']**(5/2)*SKADS['dN']/SKADS['dS']/SKADS['solid_angle'],
+                        yerr=counts['S']**(5/2)*np.sqrt(SKADS['dN'])/SKADS['dS']/SKADS['solid_angle'],
+                        fmt=':.', color='r', lw=0.5, label='SKADS Simulation')
+
+            plt.xscale('log')
+            plt.yscale('log')
+
+            if fancy:
+                plt.ylabel('$S^{5/2}\\  \\mathrm{d}N/\\mathrm{d}S \\ (\\mathrm{Jy}^{3/2} \\mathrm{sr}^{-1})$')
+                plt.xlabel('$S (\\mathrm{Jy})$')
+            else:
+                plt.ylabel('S^5/2 dN/dS (Jy^3/2 / sr)')
+                plt.xlabel('S (Jy)')
+            plt.legend()
+
+            outfile = os.path.join(self.dirname, self.cat_name+'_diff_counts.png')
+            print(f"--> Saving plot of differential number counts '{outfile}'")
+
+            plt.savefig(outfile, dpi=dpi)
+            plt.close()
+
+    def plot_resolved_fraction(self, stacked_cat, fancy, dpi, no_plot=False):
+        '''
+        Plot fraction of resolved sources
+        '''
+        def size_error_condon(catalog, beam_maj, beam_min):
+            # Implement errors for elliptical gaussians in the presence of correlated noise
+            # as per Condon (1998), MNRAS.
+            ncorr = beam_maj*beam_min
+
+            rho_maj = ((catalog['Maj']*catalog['Min'])/(4*ncorr)
+                       *(1 + (ncorr/catalog['Maj'])**2)**2.5
+                       *(1 + (ncorr/catalog['Min'])**2)**0.5
+                       *(catalog['Peak_flux']/catalog['Isl_rms'])**2)
+            rho_min = ((catalog['Maj']*catalog['Min'])/(4*ncorr)
+                       *(1 + ncorr/(catalog['Maj'])**2)**0.5
+                       *(1 + ncorr/(catalog['Min'])**2)**2.5
+                       *(catalog['Peak_flux']/catalog['Isl_rms'])**2)
+            majerr = np.sqrt(2*(catalog['Maj']/rho_maj)**2 + (0.02*beam_maj)**2)
+            minerr = np.sqrt(2*(catalog['Min']/rho_min)**2 + (0.02*beam_min)**2)
+
+            return majerr, minerr
+
+        def isresolved(catalog, bmaj, bmin):
+            # Check if this source is resolved (>2.33sigma beam; 98% confidence)
+            sizeerror = size_error_condon(catalog, bmaj, bmin)
+            majcompare = bmaj+2.33*sizeerror[0]
+            mincompare = bmin+2.33*sizeerror[1]
+
+            resolved_idx = catalog['Maj'] > majcompare
+            return resolved_idx
+
+        if stacked_cat:
+            resolved_idx = self.table['Resolved']
+        else:
+            resolved_idx = isresolved(self.table, self.bmaj, self.bmin)
+
+        resolved = self.table[resolved_idx]
+        unresolved = self.table[~resolved_idx]
+
+        if not no_plot:
+            # Log scale before plotting
+            plt.xscale('log')
+            plt.yscale('log')
+
+            alpha = min(1000 / (len(unresolved)+len(resolved)), 1)
+            plt.scatter(unresolved['Peak_flux']/unresolved['Isl_rms'],
+                        unresolved['Total_flux']/unresolved['Peak_flux'],
+                        color='navy', s=5, label=f'Unresolved ({len(unresolved)})',
+                        alpha=alpha)
+            plt.scatter(resolved['Peak_flux']/resolved['Isl_rms'],
+                        resolved['Total_flux']/resolved['Peak_flux'],
+                        color='crimson', s=5, label=f'Resolved ({len(resolved)})',
+                        alpha=alpha)
+
+            plt.xlim(left=4)
+
+            if fancy:
+                plt.ylabel('$S_{tot}/S_{peak}$')
+            else:
+                plt.ylabel('Total flux / Peak flux')
+            plt.xlabel('S/N')
+
+            leg = plt.legend()
+            for lh in leg.legendHandles: 
+                lh.set_alpha(1)
+
+            outfile = os.path.join(self.dirname,self.cat_name+'_resolved.png')
+            print(f"--> Saving plot of resolved sources '{outfile}'")
+
+            plt.savefig(outfile, dpi=dpi)
+            plt.close()
+
+        return resolved_idx
+
+    def flag_artifacts(self):
+        '''
+        Identify and flag artifacts
+        '''
+        bright_idx = np.argpartition(-self.table['Peak_flux'], 10)[:10]
+        idx = helpers.id_artifacts(self.table[bright_idx], self.table)
+
+        flag_close = np.zeros(len(self.table), dtype=bool)
+        flag_close[idx] = True
+
+        print(f'Identified {len(idx)} possible artifacts in the image')
+
+        return flag_close
 
 def main():
     parser = new_argument_parser()
@@ -319,6 +352,7 @@ def main():
     comp_corr = args.comp_corr
     flux_col = args.flux_col
     stacked_cat = args.stacked_catalog
+    no_plots = args.no_plots
     fancy = args.fancy
     dpi = args.dpi
 
@@ -330,17 +364,19 @@ def main():
     catalog = Catalog(catalog_file, stacked_cat)
     catalog.get_flux_bins(flux_col, nbins=50)
 
-    catalog.plot_number_counts(fancy, dpi)
+    catalog.plot_number_counts(fancy, dpi, no_plot=no_plots)
 
     if rms_image:
-        radial_profile, rms_coverage = catalog.rms_statistics(rms_image, fancy)
-        catalog.plot_diff_number_counts(flux_col, fancy, dpi, rms_coverage=rms_coverage)
+        radial_profile, rms_coverage = catalog.rms_statistics(rms_image, fancy, no_plot=no_plots)
+        catalog.plot_diff_number_counts(flux_col, fancy, dpi, rms_coverage=rms_coverage, no_plot=no_plots)
     if comp_corr:
-        catalog.plot_diff_number_counts(flux_col, fancy, dpi, completeness=comp_corr)
+        catalog.plot_diff_number_counts(flux_col, fancy, dpi, completeness=comp_corr, no_plot=no_plots)
 
-    resolved = catalog.plot_resolved_fraction(stacked_cat, fancy, dpi)
+    resolved = catalog.plot_resolved_fraction(stacked_cat, fancy, dpi, no_plot=no_plots)
+    flag_close = catalog.flag_artifacts()
     if not stacked_cat:
         catalog.table['Resolved'] = resolved
+        catalog.table['Flag_Artifact'] = flag_close
         catalog.table.write(catalog_file, overwrite=True)
 
 def new_argument_parser():
@@ -364,6 +400,8 @@ def new_argument_parser():
     parser.add_argument('--stacked_catalog', action='store_true',
                         help="""Indicate if catalog is built up from multiple catalogs,
                                 for example with combine_catalogs script.""")
+    parser.add_argument('--no_plots', action='store_true',
+                        help="""Run the scripts without making any plots.""")
     parser.add_argument('--fancy', action='store_true',
                         help="Output plots with latex font and formatting.")
     parser.add_argument('-d', '--dpi', default=300,

@@ -362,7 +362,7 @@ def getracsdata(central_coord,offset):
     racs = vo.dal.SCSService(RACSCATURL)
 
     # Search around coordinates
-    racsresults = racs.search(pos=central_coord, radius=offset, verbosity=3)
+    racsresults = racs.search(pos=central_coord, radius=offset, verbosity=3, timeout=10)
     racstable = racsresults.to_table()
 
     if len(racstable) == 0:

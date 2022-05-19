@@ -59,6 +59,8 @@ def main():
     mode = args.mode
     keys = args.keys
 
+    print('Combining catalogs: '+','.join(input_cats))
+
     if mode == 'vstack':
         vstack_catalogs(input_cats, output_cat)
     if mode == 'hstack':

@@ -148,13 +148,13 @@ def transform_cat(catalog, survey_name, img, argfile):
         survey_name = ''
 
     ids = [survey_name+'J{0}{1}'.format(coord.ra.to_string(unit=u.hourangle,
-                                                     sep='',
-                                                     precision=0,
-                                                     pad=True),
-                                 coord.dec.to_string(sep='',
-                                                      precision=0,
-                                                      alwayssign=True,
-                                                      pad=True)) for coord in source_coord]
+                                                           sep='',
+                                                           precision=2,
+                                                           pad=True),
+                                        coord.dec.to_string(sep='',
+                                                            precision=1,
+                                                            alwayssign=True,
+                                                            pad=True)) for coord in source_coord]
 
     sep = pointing_center.separation(source_coord)
     quality_flag = [1] * len(catalog)

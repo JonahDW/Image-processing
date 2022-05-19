@@ -174,6 +174,8 @@ def matches_to_kvis(pointing, ext, matches, annotate, annotate_nonmatchedcat, si
         non_match_int_lines.append(toprt)
 
     outputfilename = os.path.join(pointing.dirname,f'match_{ext.name}_{pointing.name}.ann')
+    print(f"--> Writing kvis annotation file '{outputfilename}'")
+
     kvisfile = open(outputfilename,'w')
     kvisfile.writelines('# Annotation file used for KVIS\n')
     kvisfile.writelines('# \n')
@@ -249,6 +251,8 @@ def matches_to_ds9(pointing, ext, matches, annotate, annotate_nonmatchedcat, sig
         non_match_int_lines.append(toprt)
 
     outputfilename = os.path.join(pointing.dirname,f'match_{ext.name}_{pointing.name}.reg')
+    print(f"--> Writing ds9 region file '{outputfilename}'")
+
     regfile = open(outputfilename,'w')
     regfile.writelines('# Region file format: DS9 CARTA 1.4\n')
     regfile.writelines('# \n')
