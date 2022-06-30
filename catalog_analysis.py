@@ -265,8 +265,8 @@ class Catalog:
             ncorr = beam_maj*beam_min
 
             rho_maj = ((catalog['Maj']*catalog['Min'])/(4*ncorr)
-                       *(1 + (ncorr/catalog['Maj'])**2)**2.5
-                       *(1 + (ncorr/catalog['Min'])**2)**0.5
+                       *(1 + ncorr/(catalog['Maj'])**2)**2.5
+                       *(1 + ncorr/(catalog['Min'])**2)**0.5
                        *(catalog['Peak_flux']/catalog['Isl_rms'])**2)
             rho_min = ((catalog['Maj']*catalog['Min'])/(4*ncorr)
                        *(1 + ncorr/(catalog['Maj'])**2)**0.5

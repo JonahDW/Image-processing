@@ -273,6 +273,8 @@ class Pointing:
                                    dec = [self.center.dec.to_string(u.deg, sep=' ')],
                                    offset = 0.5*self.fov.to(u.arcsec))
 
+        print(nvsstable)
+
         nvsstable['Major'].unit = u.arcsec
         nvsstable['Minor'].unit = u.arcsec
 

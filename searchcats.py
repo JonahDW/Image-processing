@@ -277,9 +277,6 @@ def getnvssdata(ra,dec,offset):
 
         nvssdata=filternvssfile(nvssfiturldata)
 
-        if not nvssdata:
-            return None
-
         nvsstable = ascii.read(nvssdata,
                                format='fixed_width_no_header',
                                names=col_names,
