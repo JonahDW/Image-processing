@@ -273,8 +273,6 @@ class Pointing:
                                    dec = [self.center.dec.to_string(u.deg, sep=' ')],
                                    offset = 0.5*self.fov.to(u.arcsec))
 
-        print(nvsstable)
-
         nvsstable['Major'].unit = u.arcsec
         nvsstable['Minor'].unit = u.arcsec
 
@@ -838,9 +836,9 @@ def new_argument_parser():
 
     parser = ArgumentParser()
 
-    parser.add_argument("pointing",
+    parser.add_argument("pointing", type=str,
                         help="""Pointing catalog made by PyBDSF.""")
-    parser.add_argument("ext_cat", default="NVSS",
+    parser.add_argument("ext_cat", default="NVSS", type=str,
                         help="""External catalog to match to, choice between
                                 NVSS, SUMMS, FIRST, TGSS, RACS or a file. If the external
                                 catalog is a PyBDSF catalog, make sure the filename

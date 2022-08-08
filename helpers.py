@@ -287,7 +287,7 @@ def runningmedian(X, Y, window, stepsize):
 
     return np.asarray(medians_x), np.asarray(medians_y), np.asarray(stds_y)
 
-def id_artifacts(bright_sources, catalog):
+def id_artifacts(bright_sources, catalog, bmaj):
     '''
     Identify artifacts near bright sources
     '''
@@ -298,10 +298,29 @@ def id_artifacts(bright_sources, catalog):
         source_coord = SkyCoord(source['RA'], source['DEC'], unit='deg', frame='icrs')
 
         d2d = source_coord.separation(catalog_coord)
-        close = d2d < 5*source['Min']*u.deg
+        close = d2d < 5*bmaj*u.deg
 
         indices.append(np.where(np.logical_and(close, catalog['Peak_flux'] < 0.1*source['Peak_flux']))[0])
 
     indices = np.concatenate(indices)
     unique_indices = np.unique(indices)
     return unique_indices
+
+def size_error_condon(catalog, beam_maj, beam_min):
+    # Implement errors for elliptical gaussians in the presence of correlated noise
+    # as per Condon (1998), MNRAS.
+    ncorr = beam_maj*beam_min
+
+    rho_maj = (np.sqrt(catalog['Maj']*catalog['Min']/(4*ncorr))
+               * (1 + ncorr/catalog['Maj']**2)**1.25
+               * (1 + ncorr/catalog['Min']**2)**0.25
+               * (catalog['Peak_flux']/catalog['Isl_rms']))
+    rho_min = (np.sqrt(catalog['Maj']*catalog['Min']/(4*ncorr))
+               * (1 + ncorr/catalog['Maj']**2)**0.25
+               * (1 + ncorr/catalog['Min']**2)**1.25
+               * (catalog['Peak_flux']/catalog['Isl_rms']))
+
+    e_maj = np.sqrt(2)*catalog['Maj']/rho_maj + 0.02*catalog['Maj']
+    e_min = np.sqrt(2)*catalog['Min']/rho_min + 0.02*catalog['Min']
+
+    return e_maj, e_min

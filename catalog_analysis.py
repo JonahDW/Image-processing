@@ -25,12 +25,16 @@ import helpers
 
 class Catalog:
 
-    def __init__(self, catalog_file, stacked_cat):
+    def __init__(self, catalog_file, flux_col, stacked_cat):
         self.dirname = os.path.dirname(catalog_file)
         self.cat_name = os.path.basename(catalog_file).split('.')[0]
         print(f'Reading in catalog: {self.cat_name}')
 
         self.table = Table.read(catalog_file)
+        if not flux_col in self.table.colnames:
+            print(f'Invalid flux column name {flux_col}')
+            sys.exit(1)
+        self.flux_col = flux_col
 
         # Parse meta
         header = self.table.meta
@@ -64,11 +68,11 @@ class Catalog:
         flux_col -- Which table column to use for flux
         nbins    -- Number of bins
         '''
-        f_low = np.min(self.table[flux_col])
-        f_high = np.max(self.table[flux_col])
+        f_low = np.min(self.table[self.flux_col])
+        f_high = np.max(self.table[self.flux_col])
         log_bin = np.logspace(np.log10(f_low),np.log10(f_high),nbins)
 
-        self.dN, self.edges = np.histogram(self.table[flux_col], bins=log_bin)
+        self.dN, self.edges = np.histogram(self.table[self.flux_col], bins=log_bin)
 
         # Remove high flux bins starting from the first empty bin
         if any(self.dN[int(nbins/2):] == 0):
@@ -187,8 +191,8 @@ class Catalog:
         '''
         counts = {}
 
-        bin_means = [np.mean(self.table[flux_col][np.logical_and(self.table[flux_col] > self.edges[i],
-                             self.table[flux_col] < self.edges[i+1])]) for i in range(len(self.edges)-1)]
+        bin_means = [np.mean(self.table[self.flux_col][np.logical_and(self.table[self.flux_col] > self.edges[i],
+                             self.table[self.flux_col] < self.edges[i+1])]) for i in range(len(self.edges)-1)]
         counts['solid_angle'] = self.pix_area*self.pix_size**2*(np.pi/180)**2
         counts['dN'] = self.dN
         counts['dS'] = np.diff(self.edges)
@@ -236,7 +240,7 @@ class Catalog:
         if not no_plot:
             plt.errorbar(counts['S'], counts['S']**(5/2)*SKADS['dN']/SKADS['dS']/SKADS['solid_angle'],
                         yerr=counts['S']**(5/2)*np.sqrt(SKADS['dN'])/SKADS['dS']/SKADS['solid_angle'],
-                        fmt=':.', color='r', lw=0.5, label='SKADS Simulation')
+                        fmt=':.', color='r', lw=0.5, label='SKADS @ 1285 MHz')
 
             plt.xscale('log')
             plt.yscale('log')
@@ -259,31 +263,17 @@ class Catalog:
         '''
         Plot fraction of resolved sources
         '''
-        def size_error_condon(catalog, beam_maj, beam_min):
-            # Implement errors for elliptical gaussians in the presence of correlated noise
-            # as per Condon (1998), MNRAS.
-            ncorr = beam_maj*beam_min
-
-            rho_maj = ((catalog['Maj']*catalog['Min'])/(4*ncorr)
-                       *(1 + ncorr/(catalog['Maj'])**2)**2.5
-                       *(1 + ncorr/(catalog['Min'])**2)**0.5
-                       *(catalog['Peak_flux']/catalog['Isl_rms'])**2)
-            rho_min = ((catalog['Maj']*catalog['Min'])/(4*ncorr)
-                       *(1 + ncorr/(catalog['Maj'])**2)**0.5
-                       *(1 + ncorr/(catalog['Min'])**2)**2.5
-                       *(catalog['Peak_flux']/catalog['Isl_rms'])**2)
-            majerr = np.sqrt(2*(catalog['Maj']/rho_maj)**2 + (0.02*beam_maj)**2)
-            minerr = np.sqrt(2*(catalog['Min']/rho_min)**2 + (0.02*beam_min)**2)
-
-            return majerr, minerr
-
         def isresolved(catalog, bmaj, bmin):
             # Check if this source is resolved (>2.33sigma beam; 98% confidence)
-            sizeerror = size_error_condon(catalog, bmaj, bmin)
-            majcompare = bmaj+2.33*sizeerror[0]
-            mincompare = bmin+2.33*sizeerror[1]
 
-            resolved_idx = catalog['Maj'] > majcompare
+            # Calculate errors on total flux and peak flux
+            sigma_s = np.sqrt(catalog['E_'+self.flux_col]**2 + (0.03*catalog[self.flux_col])**2)
+            sigma_speak = np.sqrt(catalog['E_Peak_flux']**2 + (0.03*catalog['Peak_flux'])**2)
+
+            sigma_r = np.sqrt((sigma_s/catalog[self.flux_col])**2
+                            + (sigma_speak/catalog['Peak_flux'])**2)
+
+            resolved_idx = np.log(catalog[self.flux_col]/catalog['Peak_flux']) > 1.25*sigma_r
             return resolved_idx
 
         if stacked_cat:
@@ -300,13 +290,13 @@ class Catalog:
             plt.yscale('log')
 
             alpha = min(1000 / (len(unresolved)+len(resolved)), 1)
-            plt.scatter(unresolved['Peak_flux']/unresolved['Isl_rms'],
-                        unresolved['Total_flux']/unresolved['Peak_flux'],
-                        color='navy', s=5, label=f'Unresolved ({len(unresolved)})',
-                        alpha=alpha)
             plt.scatter(resolved['Peak_flux']/resolved['Isl_rms'],
-                        resolved['Total_flux']/resolved['Peak_flux'],
+                        resolved[self.flux_col]/resolved['Peak_flux'],
                         color='crimson', s=5, label=f'Resolved ({len(resolved)})',
+                        alpha=alpha)
+            plt.scatter(unresolved['Peak_flux']/unresolved['Isl_rms'],
+                        unresolved[self.flux_col]/unresolved['Peak_flux'],
+                        color='navy', s=5, label=f'Unresolved ({len(unresolved)})',
                         alpha=alpha)
 
             plt.xlim(left=4)
@@ -334,7 +324,7 @@ class Catalog:
         Identify and flag artifacts
         '''
         bright_idx = np.argpartition(-self.table['Peak_flux'], 10)[:10]
-        idx = helpers.id_artifacts(self.table[bright_idx], self.table)
+        idx = helpers.id_artifacts(self.table[bright_idx], self.table, self.bmaj)
 
         flag_close = np.zeros(len(self.table), dtype=bool)
         flag_close[idx] = True
@@ -361,8 +351,8 @@ def main():
         plt.rc('text', usetex=True)
         plt.rcParams.update({'font.size': 14})
 
-    catalog = Catalog(catalog_file, stacked_cat)
-    catalog.get_flux_bins(flux_col, nbins=50)
+    catalog = Catalog(catalog_file, flux_col, stacked_cat)
+    catalog.get_flux_bins(nbins=50)
 
     catalog.plot_number_counts(fancy, dpi, no_plot=no_plots)
 
@@ -373,8 +363,8 @@ def main():
         catalog.plot_diff_number_counts(flux_col, fancy, dpi, completeness=comp_corr, no_plot=no_plots)
 
     resolved = catalog.plot_resolved_fraction(stacked_cat, fancy, dpi, no_plot=no_plots)
-    flag_close = catalog.flag_artifacts()
     if not stacked_cat:
+        flag_close = catalog.flag_artifacts()
         catalog.table['Resolved'] = resolved
         catalog.table['Flag_Artifact'] = flag_close
         catalog.table.write(catalog_file, overwrite=True)
@@ -383,7 +373,7 @@ def new_argument_parser():
 
     parser = ArgumentParser()
 
-    parser.add_argument("catalog",
+    parser.add_argument("catalog", type=str,
                         help="""Pointing catalog(s) made by PyBDSF.""")
     parser.add_argument('-r', '--rms_image', default=None,
                         help="""Specify input rms image for creating an rms coverage
@@ -394,8 +384,8 @@ def new_argument_parser():
                                 fractions for correcting differential number counts.
                                 the file is assumed to contain at least the arrays of 
                                 flux bins, completeness fraction.""")
-    parser.add_argument('--flux_col', default='Total_flux',
-                        help="""Name of flux column to use for analysis
+    parser.add_argument('--flux_col', default='Total_flux', type=str,
+                        help="""Name of integrated flux column to use for analysis
                                 (default = Total_flux).""")
     parser.add_argument('--stacked_catalog', action='store_true',
                         help="""Indicate if catalog is built up from multiple catalogs,
@@ -404,7 +394,7 @@ def new_argument_parser():
                         help="""Run the scripts without making any plots.""")
     parser.add_argument('--fancy', action='store_true',
                         help="Output plots with latex font and formatting.")
-    parser.add_argument('-d', '--dpi', default=300,
+    parser.add_argument('-d', '--dpi', default=300, type=int,
                         help="DPI of the output images (default = 300).")
 
     return parser

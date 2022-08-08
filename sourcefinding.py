@@ -316,12 +316,12 @@ def new_argument_parser():
 
     parser = ArgumentParser()
 
-    parser.add_argument("mode",
+    parser.add_argument("mode", type=str,
                         help="""Purpose of the sourcefinding, choose between
                                 cataloging (c) or masking (m). This choice will determine
                                 the parameter file that PyBDSF will use, as well as the
                                 output files.""")
-    parser.add_argument("image",
+    parser.add_argument("image", type=str,
                         help="""Name of the image to perform sourcefinding on.""")
     parser.add_argument("-o", "--output_format", nargs='+', default=None,
                         help="""Output format of the catalog, supported formats
@@ -331,7 +331,7 @@ def new_argument_parser():
                                 a fits format source list includes all available information and will be 
                                 used for further processing. Input can be multiple entries, 
                                 e.g. -o fits:srl ds9 (default = fits:srl).""")
-    parser.add_argument("-s", "--size", default=1.0,
+    parser.add_argument("-s", "--size", default=1.0, type=float,
                         help="""If masking, multiply the size of the masks by this
                                 amount (default = 1.0).""")
     parser.add_argument("--plot", nargs="?", const=True,
