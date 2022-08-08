@@ -60,7 +60,7 @@ class Catalog:
         self.edges = None
         self.npix = None
 
-    def get_flux_bins(self, flux_col, nbins):
+    def get_flux_bins(self, nbins):
         '''
         Define flux bins for the catalog
 
