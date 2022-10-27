@@ -133,7 +133,10 @@ def transform_cat(catalog, survey_name, img, argfile):
     '''
     Add names for sources in the catalog following IAU naming conventions
     '''
-    header = dict([x.split(' = ') for x in catalog.meta['comments'][4:]])
+    header = {}
+    for x in catalog.meta['comments']:
+        if x.find(' = ') != -1:
+            header[x.split(' = ')[0]]=x.split(' = ')[-1]
 
     pointing_center = SkyCoord(float(header['CRVAL1'])*u.degree,
                                float(header['CRVAL2'])*u.degree)
