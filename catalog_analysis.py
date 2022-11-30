@@ -151,8 +151,10 @@ class Catalog:
 
         rms_range = np.logspace(np.log10(np.nanmin(rms_data)), np.log10(np.nanmax(rms_data)), 100)
         coverage = [np.sum([rms_data < rms])/np.count_nonzero(~np.isnan(rms_data)) for rms in rms_range]
+        # Put sigma_20 into header
+        self.table.meta['sigma_20'] = rms_range[np.argmin(np.abs(np.array(coverage)-0.2))]
 
-        # Define a splin and interpolate the values
+        # Define a spline and interpolate the values
         rms_coverage = interp1d(rms_range, coverage, fill_value='extrapolate')
         self.npix = np.count_nonzero(~np.isnan(rms_data))
 
@@ -228,18 +230,14 @@ class Catalog:
                      fmt='o', color='k', label='Catalog')
 
         # Get differential number counts from SKADS and plot
-        path = Path(__file__).parent / 'parsets/intflux_SKADS.pkl'
-        intflux = helpers.pickle_from_file(path)
-        SKADS = {}
-        SKADS['total_flux']= 10**intflux
-
-        SKADS['dN'], edges = np.histogram(SKADS['total_flux'], bins=self.edges)
-        SKADS['dS'] = np.diff(edges)
-        SKADS['solid_angle'] = 10.0**2*(np.pi/180)**2
+        path = Path(__file__).parent / 'parsets/SKADS_10muJy_diff_counts.json'
+        with open(path) as f:
+            SKADS = json.load(f)
 
         if not no_plot:
-            plt.errorbar(counts['S'], counts['S']**(5/2)*SKADS['dN']/SKADS['dS']/SKADS['solid_angle'],
-                        yerr=counts['S']**(5/2)*np.sqrt(SKADS['dN'])/SKADS['dS']/SKADS['solid_angle'],
+            SKADS['flux_means'] = np.array([(SKADS['flux_bins'][i]+SKADS['flux_bins'][i+1])/2 for i in range(len(SKADS['flux_bins'])-1)])
+            plt.errorbar(SKADS['flux_means'], SKADS['counts_1285'],
+                        yerr=SKADS['counts_1285_err'],
                         fmt=':.', color='r', lw=0.5, label='SKADS @ 1285 MHz')
 
             plt.xscale('log')

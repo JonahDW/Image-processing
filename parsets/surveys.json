@@ -73,8 +73,8 @@
 		"data_columns" : {
 			"ra" : "ra",
 			"dec" : "dec",
-			"majax" : "maj",
-			"minax" : "min",
+			"majax" : "maj_axis",
+			"minax" : "min_axis",
 			"pa" : "pa",
 			"peak_flux" : "peak_flux",
 			"total_flux" : "total_flux_source"

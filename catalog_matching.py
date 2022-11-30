@@ -370,10 +370,10 @@ class Pointing:
         racstable = sc.getracsdata(central_coord = self.center,
                                    offset = 0.5*self.fov)
 
-        racstable['maj']   = racstable['maj'].to(u.deg)
-        racstable['min']   = racstable['min'].to(u.deg)
-        racstable['e_maj'] = racstable['e_maj'].to(u.deg)
-        racstable['e_min'] = racstable['e_min'].to(u.deg)
+        racstable['maj_axis']   = racstable['maj_axis'].to(u.deg)
+        racstable['min_axis']   = racstable['min_axis'].to(u.deg)
+        racstable['e_maj_axis'] = racstable['e_maj_axis'].to(u.deg)
+        racstable['e_min_axis'] = racstable['e_min_axis'].to(u.deg)
 
         racstable['dc_maj']   = racstable['dc_maj'].to(u.deg)
         racstable['dc_min']   = racstable['dc_min'].to(u.deg)
