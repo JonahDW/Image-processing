@@ -285,8 +285,8 @@ def main():
         sys.exit()
 
     output_dir = os.path.join(os.path.dirname(inpimage),
-                              os.path.basename(inpimage).split('.')[0]+'_pybdsf')
-    imname = os.path.join(output_dir, os.path.basename(inpimage).split('.')[0])
+                              os.path.basename(inpimage).rsplit('.',1)[0]+'_pybdsf')
+    imname = os.path.join(output_dir, os.path.basename(inpimage).rsplit('.',1)[0])
     if not os.path.exists(output_dir):
         os.mkdir(output_dir)
 
