@@ -228,12 +228,12 @@ def write_mask(outfile, regions, size=1.0):
     print(f'Wrote mask file to {outfile}')
     regions.write(outfile, format='crtf')
 
-def plot_sf_results(image_file, rms_image, regions, max_sep, plot):
+def plot_sf_results(image_file, imname, regions, max_sep, plot):
     '''
     Plot the results of the sourcefinding
     '''
     image = fits.open(image_file)
-    rms = fits.open(rms_image)
+    rms = fits.open(imname+'_rms.fits')
 
     img = image[0].data[0,0,:,:]
     rms_img = rms[0].data[0,0,:,:]
@@ -250,13 +250,14 @@ def plot_sf_results(image_file, rms_image, regions, max_sep, plot):
         ax.add_patch(patch)
 
     if max_sep is not None:
-        skycoord_object = SkyCoord(image[0].header['CRVAL1'] * u.deg, image[0].header['CRVAL2'] * u.deg)
-        s = SphericalCircle(skycoord_object, max_sep * u.degree,
-                            edgecolor='white', facecolor='none', lw=1)
+        center = (image[0].header['CRVAL1'] * u.deg, image[0].header['CRVAL2'] * u.deg)
+        s = SphericalCircle(center, max_sep * u.deg,
+                            edgecolor='white', facecolor='none', lw=1,
+                            transform=ax.get_transform('fk5'))
         ax.add_patch(s)
 
     if plot is True:
-        plt.savefig(os.path.splitext(image_file)[0]+'.png', dpi=300, bbox_inches='tight')
+        plt.savefig(imname+'.png', dpi=300, bbox_inches='tight')
     else:
         plt.savefig(plot, dpi=300, bbox_inches='tight')
     plt.close()
@@ -312,23 +313,20 @@ def main():
     bdsf_regions = catalog_to_regions(bdsf_cat)
 
     if plot:
-        plot_sf_results(f'{imname}_ch0.fits', f'{imname}_rms.fits', bdsf_regions, max_separation, plot)
+        plot_sf_results(inpimage, imname, bdsf_regions, max_separation, plot)
 
     if spectral_index:
         bdsf_cat = read_alpha(inpimage, spectral_index, bdsf_cat, bdsf_regions)
 
     # Determine output by mode
     if mode.lower() in 'cataloging':
-        outcat = outcat.replace('_srl','')
-        if outcat.endswith('.csv'):
-            outcat = outcat('.csv','.fits')
         bdsf_cat = transform_cat(bdsf_cat, survey, img, bdsf_args, max_separation)
         print(f'Wrote catalog to {outcat}')
-        bdsf_cat.write(outcat, overwrite=True)
+        bdsf_cat.write(imname+'_bdsfcat.fits', overwrite=True)
 
     if mode.lower() in 'masking':
         bdsf_cat.write(outcats[i], overwrite=True)
-        write_mask(outfile=imname+'_mask.crtf', regions=bdsf_regions, size=size)
+        write_mask(imname+'_mask.crtf', regions=bdsf_regions, size=size)
 
     # Make sure the log file is in the output folder
     logname = inpimage+'.pybdsf.log'
