@@ -14,10 +14,11 @@ from argparse import ArgumentParser
 from pathlib import Path
 
 from astropy.wcs import WCS
-from astropy.io import fits
+from astropy.io import fits, ascii
 from astropy import units as u
 from astropy.table import Table, Column
 from astropy.coordinates import SkyCoord
+from astropy.visualization.wcsaxes import SphericalCircle
 
 from regions import EllipseSkyRegion, Regions
 
@@ -129,14 +130,14 @@ def read_alpha(inpimage, alpha_image, catalog, regions):
 
     return catalog
 
-def transform_cat(catalog, survey_name, img, argfile):
+def transform_cat(catalog, survey_name, img, argfile, max_separation):
     '''
     Add names for sources in the catalog following IAU naming conventions
     '''
     header = {}
-    for x in catalog.meta['comments']:
-        if x.find(' = ') != -1:
-            header[x.split(' = ')[0]]=x.split(' = ')[-1]
+    for i, x in enumerate(img.header):
+        if x != 'HISTORY':
+            header[x]=img.header[i]
 
     pointing_center = SkyCoord(float(header['CRVAL1'])*u.degree,
                                float(header['CRVAL2'])*u.degree)
@@ -173,6 +174,10 @@ def transform_cat(catalog, survey_name, img, argfile):
     if 'OBJECT' in header:
         pointing_name = ['PT-'+header['OBJECT'].replace("'","")] * len(catalog)
         catalog.add_column(pointing_name, name='Pointing_id', index=0)
+
+    # Remove sources beyond maximum separation
+    if max_separation is not None:
+        catalog = catalog[catalog['Sep_PC'] < max_separation]
 
     # Update catalog meta
     catalog.meta['comments'] = catalog.meta['comments'][:2]
@@ -223,7 +228,7 @@ def write_mask(outfile, regions, size=1.0):
     print(f'Wrote mask file to {outfile}')
     regions.write(outfile, format='crtf')
 
-def plot_sf_results(image_file, rms_image, regions, plot):
+def plot_sf_results(image_file, rms_image, regions, max_sep, plot):
     '''
     Plot the results of the sourcefinding
     '''
@@ -244,6 +249,12 @@ def plot_sf_results(image_file, rms_image, regions, plot):
         patch = region.to_pixel(wcs).as_artist(facecolor='none', edgecolor='m', lw=0.25)
         ax.add_patch(patch)
 
+    if max_sep is not None:
+        skycoord_object = SkyCoord(image[0].header['CRVAL1'] * u.deg, image[0].header['CRVAL2'] * u.deg)
+        s = SphericalCircle(skycoord_object, max_sep * u.degree,
+                            edgecolor='white', facecolor='none', lw=1)
+        ax.add_patch(s)
+
     if plot is True:
         plt.savefig(os.path.splitext(image_file)[0]+'.png', dpi=300, bbox_inches='tight')
     else:
@@ -261,6 +272,7 @@ def main():
     plot = args.plot
     output_format = args.output_format
     spectral_index = args.spectral_index
+    max_separation = args.max_separation
     survey = args.survey
     redo_catalog = args.redo_catalog
 
@@ -291,19 +303,26 @@ def main():
         print('No FITS catalog generated, no further operations are performed')
         sys.exit()
 
-    bdsf_cat = Table.read(outcat)
+    # Check what format output catalog is
+    if outcat.endswith('.fits'):
+        bdsf_cat = Table.read(outcat)
+    elif outcat.endswith('.csv'):
+        bdsf_cat = Table.read(outcat, comment='#', delimiter=',',
+                              format='ascii.commented_header', header_start=4)
     bdsf_regions = catalog_to_regions(bdsf_cat)
 
     if plot:
-        plot_sf_results(f'{imname}_ch0.fits', f'{imname}_rms.fits', bdsf_regions, plot)
+        plot_sf_results(f'{imname}_ch0.fits', f'{imname}_rms.fits', bdsf_regions, max_separation, plot)
 
     if spectral_index:
         bdsf_cat = read_alpha(inpimage, spectral_index, bdsf_cat, bdsf_regions)
 
     # Determine output by mode
     if mode.lower() in 'cataloging':
-        outcat = outcat.replace('srl_','')
-        bdsf_cat = transform_cat(bdsf_cat, survey, img, bdsf_args)
+        outcat = outcat.replace('_srl','')
+        if outcat.endswith('.csv'):
+            outcat = outcat('.csv','.fits')
+        bdsf_cat = transform_cat(bdsf_cat, survey, img, bdsf_args, max_separation)
         print(f'Wrote catalog to {outcat}')
         bdsf_cat.write(outcat, overwrite=True)
 
@@ -346,6 +365,9 @@ def new_argument_parser():
                         help="""Measure the spectral indices of the sources using a specified
                                 spectral index image. Can be FITS or CASA format.
                                 (default = do not measure spectral indices).""")
+    parser.add_argument("--max_separation", default=None, type=float,
+                        help="""Only include sources in the final catalogue within a specified
+                                distance (in degrees) from the image centre. (default = include all)""")
     parser.add_argument("--survey", default=None,
                         help="Name of the survey to be used in source ids.")
     parser.add_argument("--redo_catalog", default=None,
