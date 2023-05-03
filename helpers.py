@@ -298,9 +298,9 @@ def id_artifacts(bright_sources, catalog, bmaj):
         source_coord = SkyCoord(source['RA'], source['DEC'], unit='deg', frame='icrs')
 
         d2d = source_coord.separation(catalog_coord)
-        close = d2d < 5*bmaj*u.deg
+        close = d2d < 10*bmaj*u.deg
 
-        indices.append(np.where(np.logical_and(close, catalog['Peak_flux'] < 0.1*source['Peak_flux']))[0])
+        indices.append(np.where(np.logical_and(close, catalog['Peak_flux'] < 0.05*source['Total_flux']))[0])
 
     indices = np.concatenate(indices)
     unique_indices = np.unique(indices)

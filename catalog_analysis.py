@@ -317,20 +317,6 @@ class Catalog:
 
         return resolved_idx
 
-    def flag_artifacts(self):
-        '''
-        Identify and flag artifacts
-        '''
-        bright_idx = np.argpartition(-self.table['Peak_flux'], 10)[:10]
-        idx = helpers.id_artifacts(self.table[bright_idx], self.table, self.bmaj)
-
-        flag_close = np.zeros(len(self.table), dtype=bool)
-        flag_close[idx] = True
-
-        print(f'Identified {len(idx)} possible artifacts in the image')
-
-        return flag_close
-
 def main():
     parser = new_argument_parser()
     args = parser.parse_args()
@@ -362,9 +348,7 @@ def main():
 
     resolved = catalog.plot_resolved_fraction(stacked_cat, fancy, dpi, no_plot=no_plots)
     if not stacked_cat:
-        flag_close = catalog.flag_artifacts()
         catalog.table['Resolved'] = resolved
-        catalog.table['Flag_Artifact'] = flag_close
         catalog.table.write(catalog_file, overwrite=True)
 
 def new_argument_parser():

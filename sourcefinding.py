@@ -130,7 +130,7 @@ def read_alpha(inpimage, alpha_image, catalog, regions):
 
     return catalog
 
-def transform_cat(catalog, survey_name, img, argfile, max_separation):
+def transform_cat(catalog, survey_name, img, max_separation, flag_artefacts):
     '''
     Add names for sources in the catalog following IAU naming conventions
     '''
@@ -175,6 +175,10 @@ def transform_cat(catalog, survey_name, img, argfile, max_separation):
         pointing_name = ['PT-'+header['OBJECT'].replace("'","")] * len(catalog)
         catalog.add_column(pointing_name, name='Pointing_id', index=0)
 
+    if flag_artefacts:
+        flag_close = flag_artifacts(catalog, img)
+        catalog.add_column(flag_close, name='Flag_Artifact')
+
     # Remove sources beyond maximum separation
     if max_separation is not None:
         catalog = catalog[catalog['Sep_PC'] < max_separation]
@@ -196,6 +200,20 @@ def transform_cat(catalog, survey_name, img, argfile, max_separation):
     catalog.meta['SF_TELE'] = img._telescope
 
     return catalog
+
+def flag_artifacts(catalog, img):
+    '''
+    Identify and flag artifacts
+    '''
+    bright_idx = catalog['Peak_flux']*(1.189*np.pi*catalog['Sep_PC'])**2/catalog['Isl_rms'] > 1000
+    idx = helpers.id_artifacts(catalog[bright_idx], catalog, img.beam[0])
+
+    flag_close = np.zeros(len(catalog), dtype=bool)
+    flag_close[idx] = True
+
+    print(f'Identified {len(idx)} possible artifacts in the image')
+
+    return flag_close
 
 def catalog_to_regions(catalog, ra='RA', dec='DEC', majax='Maj', minax='Min', PA='PA'):
     '''
@@ -228,12 +246,15 @@ def write_mask(outfile, regions, size=1.0):
     print(f'Wrote mask file to {outfile}')
     regions.write(outfile, format='crtf')
 
-def plot_sf_results(image_file, imname, regions, max_sep, plot):
+def plot_sf_results(image_file, imname, regions, max_sep, plot, flag_regions=None, rms_image=None):
     '''
     Plot the results of the sourcefinding
     '''
-    image = fits.open(image_file)
-    rms = fits.open(imname+'_rms.fits')
+    image = helpers.open_fits_casa(image_file)
+    if rms_image is not None:
+        rms = helpers.open_fits_casa(rms_image)
+    else:
+        rms = helpers.open_fits_casa(imname+'_rms.fits')
 
     img = image[0].data[0,0,:,:]
     rms_img = rms[0].data[0,0,:,:]
@@ -248,6 +269,11 @@ def plot_sf_results(image_file, imname, regions, max_sep, plot):
     for region in regions:
         patch = region.to_pixel(wcs).as_artist(facecolor='none', edgecolor='m', lw=0.25)
         ax.add_patch(patch)
+
+    if flag_regions is not None:
+        for region in flag_regions:
+            patch = region.to_pixel(wcs).as_artist(facecolor='none', edgecolor='g', lw=0.25)
+            ax.add_patch(patch)
 
     if max_sep is not None:
         center = (image[0].header['CRVAL1'] * u.deg, image[0].header['CRVAL2'] * u.deg)
@@ -274,6 +300,8 @@ def main():
     output_format = args.output_format
     spectral_index = args.spectral_index
     max_separation = args.max_separation
+    flag_artefacts = args.flag_artefacts
+    rms_image = args.rms_image
     survey = args.survey
     redo_catalog = args.redo_catalog
 
@@ -312,16 +340,23 @@ def main():
                               format='ascii.commented_header', header_start=4)
     bdsf_regions = catalog_to_regions(bdsf_cat)
 
-    if plot:
-        plot_sf_results(inpimage, imname, bdsf_regions, max_separation, plot)
-
-    if spectral_index:
-        bdsf_cat = read_alpha(inpimage, spectral_index, bdsf_cat, bdsf_regions)
-
     # Determine output by mode
     if mode.lower() in 'cataloging':
-        bdsf_cat = transform_cat(bdsf_cat, survey, img, bdsf_args, max_separation)
-        print(f'Wrote catalog to {outcat}')
+        bdsf_cat = transform_cat(bdsf_cat, survey, img, max_separation, flag_artefacts)
+
+        if plot:
+            if flag_artefacts:
+                flag_regions = catalog_to_regions(bdsf_cat[bdsf_cat['Flag_Artifact'] == True])
+                plot_sf_results(inpimage, imname, bdsf_regions, max_separation, 
+                                plot, flag_regions, rms_image)
+            else:
+                plot_sf_results(inpimage, imname, rms_image, bdsf_regions, 
+                                max_separation, plot, rms_image=rms_image)
+
+        if spectral_index:
+            bdsf_cat = read_alpha(inpimage, spectral_index, bdsf_cat, bdsf_regions)
+
+        print(f'Wrote catalog to {imname}_bdsfcat.fits')
         bdsf_cat.write(imname+'_bdsfcat.fits', overwrite=True)
 
     if mode.lower() in 'masking':
@@ -366,6 +401,10 @@ def new_argument_parser():
     parser.add_argument("--max_separation", default=None, type=float,
                         help="""Only include sources in the final catalogue within a specified
                                 distance (in degrees) from the image centre. (default = include all)""")
+    parser.add_argument("--flag_artefacts", action='store_true',
+                        help="""Add column for flagging artefacts around bright sources (default = do not flag)""")
+    parser.add_argument("--rms_image", default=None,
+                        help="""Specify RMS alternative image to use for plotting (default = use RMS image from sourcefinding)""")
     parser.add_argument("--survey", default=None,
                         help="Name of the survey to be used in source ids.")
     parser.add_argument("--redo_catalog", default=None,
