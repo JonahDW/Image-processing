@@ -205,7 +205,7 @@ def flag_artifacts(catalog, img):
     '''
     Identify and flag artifacts
     '''
-    bright_idx = catalog['Peak_flux']*(1.189*np.pi*catalog['Sep_PC'])**2/catalog['Isl_rms'] > 1000
+    bright_idx = catalog['Peak_flux']*catalog['Sep_PC']**2/catalog['Isl_rms'] > 100
     idx = helpers.id_artifacts(catalog[bright_idx], catalog, img.beam[0])
 
     flag_close = np.zeros(len(catalog), dtype=bool)
