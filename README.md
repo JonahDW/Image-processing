@@ -32,7 +32,9 @@ Will perform sourcefinding on the image `myimage.image` and produce both a fits 
 ```
 usage: sourcefinding.py [-h] [-o OUTPUT_FORMAT [OUTPUT_FORMAT ...]] [-s SIZE]
                         [--plot [PLOT]] [--spectral_index [SPECTRAL_INDEX]]
-                        [--survey SURVEY] [--redo_catalog REDO_CATALOG]
+                        [--max_separation MAX_SEPARATION] [--flag_artefacts]
+                        [--rms_image RMS_IMAGE] [--survey SURVEY]
+                        [--redo_catalog REDO_CATALOG]
                         mode image
 
 positional arguments:
@@ -49,10 +51,10 @@ optional arguments:
                         ds9, fits, star, kvis, ascii, csv. In case of fits,
                         ascii, ds9, and csv, additionally choose output
                         catalog as either source list (srl) or gaussian list
-                        (gaul), default srl. Only a fits format source list
-                        includes all available information and will be used
-                        for further processing. Input can be multiple entries,
-                        e.g. -o fits:srl ds9 (default = fits:srl).
+                        (gaul), default srl. Currently, only fits and csv
+                        formats source list can be used for further
+                        processing. Input can be multiple entries, e.g. -o
+                        fits:srl ds9 (default = fits:srl).
   -s SIZE, --size SIZE  If masking, multiply the size of the masks by this
                         amount (default = 1.0).
   --plot [PLOT]         Plot the results of the sourcefinding as a png of the
@@ -62,6 +64,15 @@ optional arguments:
                         Measure the spectral indices of the sources using a
                         specified spectral index image. Can be FITS or CASA
                         format. (default = do not measure spectral indices).
+  --max_separation MAX_SEPARATION
+                        Only include sources in the final catalogue within a
+                        specified distance (in degrees) from the image centre.
+                        (default = include all)
+  --flag_artefacts      Add column for flagging artefacts around bright
+                        sources (default = do not flag)
+  --rms_image RMS_IMAGE
+                        Specify RMS alternative image to use for plotting
+                        (default = use RMS image from sourcefinding)
   --survey SURVEY       Name of the survey to be used in source ids.
   --redo_catalog REDO_CATALOG
                         Specify catalog file if you want some part of the

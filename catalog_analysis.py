@@ -27,7 +27,7 @@ class Catalog:
 
     def __init__(self, catalog_file, flux_col, stacked_cat):
         self.dirname = os.path.dirname(catalog_file)
-        self.cat_name = os.path.basename(catalog_file).split('.')[0]
+        self.cat_name = os.path.basename(catalog_file).rsplit('.',1)[0]
         print(f'Reading in catalog: {self.cat_name}')
 
         self.table = Table.read(catalog_file)
@@ -68,7 +68,7 @@ class Catalog:
         flux_col -- Which table column to use for flux
         nbins    -- Number of bins
         '''
-        f_low = np.min(self.table[self.flux_col])
+        f_low = np.min(self.table[self.table[self.flux_col] > 0][self.flux_col])
         f_high = np.max(self.table[self.flux_col])
         log_bin = np.logspace(np.log10(f_low),np.log10(f_high),nbins)
 

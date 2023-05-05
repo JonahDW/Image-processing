@@ -77,7 +77,7 @@ class SourceEllipse:
         #
         # CAUTION: self is related to the external catalogue
         #
-        maj_match = sky_separation < FWHM_to_sigma_extent * deprojection_factor * (self.Maj/2. + maj_list/2.) + search_dist
+        maj_match = sky_separation.value < FWHM_to_sigma_extent * deprojection_factor * (self.Maj/2. + maj_list/2.) + search_dist
 
         # Check if sources match within the smallest source extend
         # these are the source we do not check further

@@ -338,11 +338,11 @@ def main():
     elif outcat.endswith('.csv'):
         bdsf_cat = Table.read(outcat, comment='#', delimiter=',',
                               format='ascii.commented_header', header_start=4)
-    bdsf_regions = catalog_to_regions(bdsf_cat)
 
     # Determine output by mode
     if mode.lower() in 'cataloging':
         bdsf_cat = transform_cat(bdsf_cat, survey, img, max_separation, flag_artefacts)
+        bdsf_regions = catalog_to_regions(bdsf_cat)
 
         if plot:
             if flag_artefacts:
@@ -350,7 +350,7 @@ def main():
                 plot_sf_results(inpimage, imname, bdsf_regions, max_separation, 
                                 plot, flag_regions, rms_image)
             else:
-                plot_sf_results(inpimage, imname, rms_image, bdsf_regions, 
+                plot_sf_results(inpimage, imname, bdsf_regions, 
                                 max_separation, plot, rms_image=rms_image)
 
         if spectral_index:
@@ -360,6 +360,8 @@ def main():
         bdsf_cat.write(imname+'_bdsfcat.fits', overwrite=True)
 
     if mode.lower() in 'masking':
+        bdsf_regions = catalog_to_regions(bdsf_cat)
+
         bdsf_cat.write(outcats[i], overwrite=True)
         write_mask(imname+'_mask.crtf', regions=bdsf_regions, size=size)
 
@@ -382,10 +384,9 @@ def new_argument_parser():
                         help="""Output format of the catalog, supported formats
                                 are: ds9, fits, star, kvis, ascii, csv. In case of fits,
                                 ascii, ds9, and csv, additionally choose output catalog as either
-                                source list (srl) or gaussian list (gaul), default srl. Only
-                                a fits format source list includes all available information and will be 
-                                used for further processing. Input can be multiple entries, 
-                                e.g. -o fits:srl ds9 (default = fits:srl).""")
+                                source list (srl) or gaussian list (gaul), default srl. Currently, only
+                                fits and csv formats source list can be used for further processing. 
+                                Input can be multiple entries, e.g. -o fits:srl ds9 (default = fits:srl).""")
     parser.add_argument("-s", "--size", default=1.0, type=float,
                         help="""If masking, multiply the size of the masks by this
                                 amount (default = 1.0).""")
