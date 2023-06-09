@@ -361,8 +361,6 @@ def main():
 
     if mode.lower() in 'masking':
         bdsf_regions = catalog_to_regions(bdsf_cat)
-
-        bdsf_cat.write(outcats[i], overwrite=True)
         write_mask(imname+'_mask.crtf', regions=bdsf_regions, size=size)
 
     # Make sure the log file is in the output folder
