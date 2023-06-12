@@ -252,6 +252,7 @@ class Pointing:
         if fov is None:
             dec_fov = abs(float(self.header['CDELT1']))*float(self.header['CRPIX1'])*2
             self.fov = dec_fov/np.cos(self.center.dec.rad) * u.degree
+            self.uncorrected_fov = dec_fov
         else:
             self.fov = fov*u.degree
 
@@ -368,7 +369,7 @@ class Pointing:
         Match the pointing to the RACS catalog
         '''
         racstable = sc.getracsdata(central_coord = self.center,
-                                   offset = 0.5*self.fov)
+                                   offset = 0.5*self.uncorrected_fov)
 
         racstable['maj_axis']   = racstable['maj_axis'].to(u.deg)
         racstable['min_axis']   = racstable['min_axis'].to(u.deg)
@@ -567,7 +568,7 @@ def plot_catalog_match(pointing, ext, matches, plot, dpi):
         outfile = plot
 
     print(f"--> Saving plot of source ellipses '{outfile}'")
-    plt.savefig(astro, dpi=dpi, bbox_inches='tight')
+    plt.savefig(outfile, dpi=dpi, bbox_inches='tight')
 
     plt.close()
 
@@ -897,7 +898,7 @@ def new_argument_parser():
                                 (default = use CRVAL1/2 from image header). """)
     parser.add_argument("--fov", default=None, type=float,
                         help="""Assumed FOV (degrees) for matching to external catalogues.
-                                (default = use FOV of input image).""")        
+                                (default = use FOV of input image).""")
     parser.add_argument('-d', '--dpi', default=300,
                         help="""DPI of the output images (default = 300).""")
 

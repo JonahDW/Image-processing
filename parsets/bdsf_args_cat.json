@@ -5,8 +5,8 @@
         "group_by_isl" : true,
         "rms_box" : "(150,15)",
         "adaptive_rms_box" : true,
-        "adaptive_thresh" : 100.0,
-        "rms_box_bright" : "(40,15)",
+        "adaptive_thresh" : 50.0,
+        "rms_box_bright" : null,
 	"atrous_do" : true,
 	"atrous_orig_isl" : true,
 	"atrous_jmax" : 3

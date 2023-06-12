@@ -288,6 +288,7 @@ class Catalog:
             plt.yscale('log')
 
             alpha = min(1000 / (len(unresolved)+len(resolved)), 1)
+            alpha = max(alpha, 1/255)
             plt.scatter(resolved['Peak_flux']/resolved['Isl_rms'],
                         resolved[self.flux_col]/resolved['Peak_flux'],
                         color='crimson', s=5, label=f'Resolved ({len(resolved)})',

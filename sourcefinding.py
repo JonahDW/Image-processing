@@ -34,15 +34,19 @@ def run_bdsf(image, output_dir, argfile, output_format):
     argfile -- Input json file containing arguments
                for bdsf functions
     '''
-    imname = os.path.join(output_dir,os.path.basename(image).split('.')[0])
+    imname = os.path.join(output_dir,os.path.basename(image).rsplit('.',1)[0])
 
     path = Path(__file__).parent / argfile
     with open(path) as f:
         args_dict = json.load(f)
 
-    # Fix json stupidness
-    args_dict['process_image']['rms_box'] = ast.literal_eval(args_dict['process_image']['rms_box'])
-    args_dict['process_image']['rms_box_bright'] = ast.literal_eval(args_dict['process_image']['rms_box_bright'])
+    # Make sure tuples are correctly parsed
+    if 'rms_box' in args_dict['process_image']:
+        if args_dict['process_image']['rms_box'] is not None:
+            args_dict['process_image']['rms_box'] = ast.literal_eval(args_dict['process_image']['rms_box'])
+    if 'rms_box_bright' in args_dict['process_image']:
+        if args_dict['process_image']['rms_box_bright'] is not None:
+            args_dict['process_image']['rms_box_bright'] = ast.literal_eval(args_dict['process_image']['rms_box_bright'])
 
     img = bdsf.process_image(image, **args_dict['process_image'])
 
