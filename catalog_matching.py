@@ -120,29 +120,30 @@ class SourceEllipse:
 
                     for a in range(len(split_check_s_source)):
                         for b in range(len(split_to_s_sources)):
-                            do_they_overlap_split = np.invert(Polygon(split_check_s_source[a]).intersection(Polygon(split_to_s_sources[b])).is_empty)
+                            if len(split_check_s_source[a]) > 1 and len(split_to_s_sources[b]) > 1:
+                                do_they_overlap_split = np.invert(Polygon(split_check_s_source[a]).intersection(Polygon(split_to_s_sources[b])).is_empty)
 
-                            #
-                            # evaluate the sub components of the sources
-                            #
-                            if do_they_overlap_split == True:
-                                
-                                intersection_area = Polygon(split_check_s_source[a]).intersection(Polygon(split_to_s_sources[b])).area
-                                check_source_area = Polygon(split_check_s_source[a]).area
-                                to_sources_area   = Polygon(split_to_s_sources[b]).area
+                                #
+                                # evaluate the sub components of the sources
+                                #
+                                if do_they_overlap_split == True:
+                                    
+                                    intersection_area = Polygon(split_check_s_source[a]).intersection(Polygon(split_to_s_sources[b])).area
+                                    check_source_area = Polygon(split_check_s_source[a]).area
+                                    to_sources_area   = Polygon(split_to_s_sources[b]).area
 
-                                if (intersection_area != check_source_area) and  (intersection_area != to_sources_area):
+                                    if (intersection_area != check_source_area) and  (intersection_area != to_sources_area):
 
-                                    areas_percentage = [intersection_area/check_source_area, intersection_area/to_sources_area]
+                                        areas_percentage = [intersection_area/check_source_area, intersection_area/to_sources_area]
 
-                                    if max(areas_percentage) * 100 > overlap_percentage:
-                                        do_they_overlap = True
+                                        if max(areas_percentage) * 100 > overlap_percentage:
+                                            do_they_overlap = True
 
-                                del intersection_area, check_source_area, to_sources_area
+                                    del intersection_area, check_source_area, to_sources_area
 
-                            #
-                            del do_they_overlap_split
-                            gc.collect()
+                                #
+                                del do_they_overlap_split
+                                gc.collect()
 
                 else:
                     # this is a realy cool thing

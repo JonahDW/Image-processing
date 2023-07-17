@@ -276,6 +276,9 @@ def getnvssdata(ra,dec,offset):
         nvssfiturldata = nvssfiturl.split('\n')
 
         nvssdata=filternvssfile(nvssfiturldata)
+        if len(nvssdata) == 0:
+            print('No NVSS data found, it most likely has no coverage here')
+            sys.exit()
 
         nvsstable = ascii.read(nvssdata,
                                format='fixed_width_no_header',
