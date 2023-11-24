@@ -134,7 +134,7 @@ def read_alpha(inpimage, alpha_image, catalog, regions):
 
     return catalog
 
-def transform_cat(catalog, survey_name, img, max_separation, flag_artefacts):
+def transform_cat(catalog, img, max_separation, flag_artefacts, pointing_name, survey_name):
     '''
     Add names for sources in the catalog following IAU naming conventions
     '''
@@ -174,14 +174,17 @@ def transform_cat(catalog, survey_name, img, max_separation, flag_artefacts):
     catalog.add_columns([col_a, col_b, col_c],
                          indexes=[0,6,-1])
 
-    # Add identifier if present in the header
-    if 'OBJECT' in header:
-        pointing_name = ['PT-'+header['OBJECT'].replace("'","")] * len(catalog)
+    # Add identifier
+    if 'OBJECT' in header and pointing_name is None:
+        pointing_name = [header['OBJECT'].replace("'","")] * len(catalog)
+    if pointing_name:
         catalog.add_column(pointing_name, name='Pointing_id', index=0)
 
     if flag_artefacts:
         flag_close = flag_artifacts(catalog, img)
         catalog.add_column(flag_close, name='Flag_Artifact')
+        # Set quality flag of artefacts
+        catalog['Quality_flag'][catalog['Flag_Artifact']] = 0
 
     # Remove sources beyond maximum separation
     if max_separation is not None:
@@ -301,12 +304,14 @@ def main():
     mode = args.mode
     size = args.size
     plot = args.plot
+    outdir = args.outdir
     output_format = args.output_format
     spectral_index = args.spectral_index
     max_separation = args.max_separation
     flag_artefacts = args.flag_artefacts
     rms_image = args.rms_image
     survey = args.survey
+    pointing = args.pointing
     redo_catalog = args.redo_catalog
 
     if mode.lower() in 'cataloging':
@@ -317,8 +322,11 @@ def main():
         print(f'Invalid mode {mode}, please choose between c(ataloging) or m(asking)')
         sys.exit()
 
-    output_dir = os.path.join(os.path.dirname(inpimage),
-                              os.path.basename(inpimage).rsplit('.',1)[0]+'_pybdsf')
+    if outdir is None:
+        output_dir = os.path.join(os.path.dirname(inpimage),
+                                  os.path.basename(inpimage).rsplit('.',1)[0]+'_pybdsf')
+    else:
+        output_dir = os.path.join(outdir, os.path.basename(inpimage).rsplit('.',1)[0]+'_pybdsf')
     imname = os.path.join(output_dir, os.path.basename(inpimage).rsplit('.',1)[0])
     if not os.path.exists(output_dir):
         os.mkdir(output_dir)
@@ -345,7 +353,7 @@ def main():
 
     # Determine output by mode
     if mode.lower() in 'cataloging':
-        bdsf_cat = transform_cat(bdsf_cat, survey, img, max_separation, flag_artefacts)
+        bdsf_cat = transform_cat(bdsf_cat, img, max_separation, flag_artefacts, pointing, survey)
         bdsf_regions = catalog_to_regions(bdsf_cat)
 
         if plot:
@@ -389,7 +397,9 @@ def new_argument_parser():
                                 source list (srl) or gaussian list (gaul), default srl. Currently, only
                                 fits and csv formats source list can be used for further processing. 
                                 Input can be multiple entries, e.g. -o fits:srl ds9 (default = fits:srl).""")
-    parser.add_argument("-s", "--size", default=1.0, type=float,
+    parser.add_argument("--outdir", default=None, type=str, 
+                        help="Name of directory to place output, default is the image directory.")
+    parser.add_argument("--size", default=1.0, type=float,
                         help="""If masking, multiply the size of the masks by this
                                 amount (default = 1.0).""")
     parser.add_argument("--plot", nargs="?", const=True,
@@ -404,12 +414,16 @@ def new_argument_parser():
     parser.add_argument("--max_separation", default=None, type=float,
                         help="""Only include sources in the final catalogue within a specified
                                 distance (in degrees) from the image centre. (default = include all)""")
-    parser.add_argument("--flag_artefacts", action='store_true',
-                        help="""Add column for flagging artefacts around bright sources (default = do not flag)""")
-    parser.add_argument("--rms_image", default=None,
-                        help="""Specify RMS alternative image to use for plotting (default = use RMS image from sourcefinding)""")
-    parser.add_argument("--survey", default=None,
-                        help="Name of the survey to be used in source ids.")
+    parser.add_argument("--flag_artefacts", action='store_true', 
+                        help="""Add column for flagging artefacts around 
+                                bright sources (default = do not flag)""")
+    parser.add_argument("--rms_image", default=None, 
+                        help="""Specify RMS alternative image to use for plotting 
+                                (default = use RMS image from sourcefinding)""")
+    parser.add_argument("--survey", default=None, help="Name of the survey to be used in source ids.")
+    parser.add_argument("--pointing", default=None, type=str,
+                        help="""Name of the pointing to be used in the pointing id. 
+                                If not specified this is taken from the 'OBJECT' header flag.""")
     parser.add_argument("--redo_catalog", default=None,
                         help="""Specify catalog file if you want some part of the process
                                 to be redone, but want to skip sourcefinding""")

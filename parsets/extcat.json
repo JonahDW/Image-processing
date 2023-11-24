@@ -7,7 +7,7 @@
         "pa" : "PA",
         "peak_flux" : "Peak_flux",
         "total_flux" : "Total_flux",
-	"quality_flag" : null
+		"quality_flag" : null
     },
     "properties" : {
         "_comment" : "BMAJ and BMIN in arcsec, BPA in degrees, freq in MHz",

@@ -675,7 +675,7 @@ def plot_fluxes(match_info, pointing, ext, fluxtype, flux, dpi):
     fig, ax = plt.subplots()
 
     # Log scale before plotting
-    if np.log10(flux_matches['dFlux'].max()/flux_matches['dFlux'].min()) > 2:
+    if np.log10(flux_matches['dFlux'].max()/flux_matches['dFlux'].min()) > 1:
         ax.set_yscale('log')
 
     sc = ax.scatter(flux_matches['separation'], 

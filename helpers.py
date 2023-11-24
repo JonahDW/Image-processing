@@ -300,7 +300,7 @@ def id_artifacts(bright_sources, catalog, bmaj):
         d2d = source_coord.separation(catalog_coord)
         close = d2d < 10*bmaj*u.deg
 
-        indices.append(np.where(np.logical_and(close, catalog['Total_flux'] < 0.05*source['Peak_flux']))[0])
+        indices.append(np.where(np.logical_and(close, catalog['Peak_flux'] < 0.05*source['Peak_flux']))[0])
 
     indices = np.concatenate(indices)
     unique_indices = np.unique(indices)
