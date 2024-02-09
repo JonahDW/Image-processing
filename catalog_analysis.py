@@ -2,7 +2,8 @@
 
 import os
 import sys
-import pickle
+import json
+import warnings
 import numpy as np
 
 from astropy import units as u
@@ -10,16 +11,12 @@ from astropy.io import fits
 from astropy.table import Table, vstack
 from astropy.coordinates import SkyCoord
 
-import json
 from pathlib import Path
 from argparse import ArgumentParser
 from numpyencoder import NumpyEncoder
 
 import matplotlib.pyplot as plt
-from matplotlib.patches import Ellipse
-
-from scipy.optimize import curve_fit
-from scipy.interpolate import UnivariateSpline, interp1d
+from scipy.interpolate import interp1d
 
 import helpers
 
@@ -41,16 +38,6 @@ class Catalog:
         if not stacked_cat:
             self.pix_area = np.pi*float(header['AXIS1'])*float(header['AXIS2'])/4
             self.pix_size = float(max(header['CDELT1'],header['CDELT2']))
-            self.bmaj = float(header['SF_BMAJ'])
-            self.bmin = float(header['SF_BMIN'])
-
-            # Determine frequency axis:
-            for i in range(1,5):
-                if 'FREQ' in header['CTYPE'+str(i)]:
-                    freq_idx = i
-                    break
-            self.freq = float(header['CRVAL'+str(freq_idx)])/1e6 #MHz
-            self.dfreq = float(header['CDELT'+str(freq_idx)])/1e6 #MHz
 
             self.center = SkyCoord(float(header['CRVAL1'])*u.degree,
                                    float(header['CRVAL2'])*u.degree)
@@ -214,7 +201,7 @@ class Catalog:
             count_correction = rms_coverage(counts['S']/5.0)
             counts['solid_angle'] = self.npix*self.pix_size**2*(np.pi/180)**2
 
-        # Save diff number counts to pickle file
+        # Save diff number counts to json file
         filename = os.path.join(self.dirname, self.cat_name+'_diff_counts.json')
         print(f"--> Saving json file of differential number counts '{filename}'")
         with open(filename, 'w') as outfile:
@@ -257,27 +244,32 @@ class Catalog:
             plt.savefig(outfile, dpi=dpi)
             plt.close()
 
-    def plot_resolved_fraction(self, stacked_cat, fancy, dpi, no_plot=False):
+    def plot_resolved_fraction(self, resolved_sigma, stacked_cat, fancy, dpi, no_plot=False):
         '''
         Plot fraction of resolved sources
         '''
-        def isresolved(catalog, bmaj, bmin):
-            # Check if this source is resolved (>2.33sigma beam; 98% confidence)
-
-            # Calculate errors on total flux and peak flux
-            sigma_s = np.sqrt(catalog['E_'+self.flux_col]**2 + (0.03*catalog[self.flux_col])**2)
-            sigma_speak = np.sqrt(catalog['E_Peak_flux']**2 + (0.03*catalog['Peak_flux'])**2)
-
-            sigma_r = np.sqrt((sigma_s/catalog[self.flux_col])**2
-                            + (sigma_speak/catalog['Peak_flux'])**2)
-
-            resolved_idx = np.log(catalog[self.flux_col]/catalog['Peak_flux']) > 1.25*sigma_r
-            return resolved_idx
 
         if stacked_cat:
             resolved_idx = self.table['Resolved']
         else:
-            resolved_idx = isresolved(self.table, self.bmaj, self.bmin)
+            # Calculate errors on total flux and peak flux
+            sigma_s = np.sqrt(self.table['E_'+self.flux_col]**2 + (0.03*self.table[self.flux_col])**2)
+            sigma_speak = np.sqrt(self.table['E_Peak_flux']**2 + (0.03*self.table['Peak_flux'])**2)
+
+            sigma_r = np.sqrt((sigma_s/self.table[self.flux_col])**2
+                            + (sigma_speak/self.table['Peak_flux'])**2)
+
+            f = resolved_sigma
+            with warnings.catch_warnings():
+                warnings.simplefilter('ignore')
+
+                # Check how much of the resolved sources are captured
+                missed_unresolved = np.sum(np.log(self.table[self.flux_col]/self.table['Peak_flux']) < -f*sigma_r)
+                defs_unresolved = np.sum(np.log(self.table[self.flux_col]/self.table['Peak_flux']) < 0)
+                print(f'Current envelope captures {(1 - (missed_unresolved/defs_unresolved))*100:.2f}% of the unresolved sources, '
+                      +'consider changing the envelope parameters if this is not satisfactory')
+
+                resolved_idx = np.log(self.table[self.flux_col]/self.table['Peak_flux']) > f*sigma_r
 
         resolved = self.table[resolved_idx]
         unresolved = self.table[~resolved_idx]
@@ -292,11 +284,11 @@ class Catalog:
             plt.scatter(resolved['Peak_flux']/resolved['Isl_rms'],
                         resolved[self.flux_col]/resolved['Peak_flux'],
                         color='crimson', s=5, label=f'Resolved ({len(resolved)})',
-                        alpha=alpha)
+                        alpha=alpha, marker='.')
             plt.scatter(unresolved['Peak_flux']/unresolved['Isl_rms'],
                         unresolved[self.flux_col]/unresolved['Peak_flux'],
                         color='navy', s=5, label=f'Unresolved ({len(unresolved)})',
-                        alpha=alpha)
+                        alpha=alpha, marker='.')
 
             plt.xlim(left=4)
 
@@ -325,6 +317,7 @@ def main():
     catalog_file = args.catalog
     rms_image = args.rms_image
     comp_corr = args.comp_corr
+    resolved_sigma = args.resolved_sigma
     flux_col = args.flux_col
     stacked_cat = args.stacked_catalog
     no_plots = args.no_plots
@@ -347,7 +340,7 @@ def main():
     if comp_corr:
         catalog.plot_diff_number_counts(flux_col, fancy, dpi, completeness=comp_corr, no_plot=no_plots)
 
-    resolved = catalog.plot_resolved_fraction(stacked_cat, fancy, dpi, no_plot=no_plots)
+    resolved = catalog.plot_resolved_fraction(resolved_sigma, stacked_cat, fancy, dpi, no_plot=no_plots)
     if not stacked_cat:
         catalog.table['Resolved'] = resolved
         catalog.table.write(catalog_file, overwrite=True)
@@ -367,6 +360,9 @@ def new_argument_parser():
                                 fractions for correcting differential number counts.
                                 the file is assumed to contain at least the arrays of 
                                 flux bins, completeness fraction.""")
+    parser.add_argument('--resolved_sigma', default=1.25, type=float,
+                        help="""Selection parameter for resolved sources, higher values more
+                                stringently select resolved sources (default=1.25).""")
     parser.add_argument('--flux_col', default='Total_flux', type=str,
                         help="""Name of integrated flux column to use for analysis
                                 (default = Total_flux).""")
