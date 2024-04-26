@@ -236,7 +236,36 @@ def catalog_to_regions(catalog, ra='RA', dec='DEC', majax='Maj', minax='Min', PA
                          angle=source[PA]*u.deg) for source in catalog])
     return regions
 
-def write_mask(outfile, regions, size=1.0):
+def write_fits_mask(imname, image_file, argfile, rms_image=None):
+    """
+    Write an output fits containing binary mask
+
+    Keyword arguments:
+    outfile -- Name of the output mask file (CRTF)
+    regions -- Region or list of regions to write
+    size -- Multiply input major and minor axes by this amount
+    """
+    image = helpers.open_fits_casa(image_file)
+    if rms_image is None:
+        rms_image = imname+'_rms.fits'
+    rms = helpers.open_fits_casa(rms_image)
+
+    path = Path(__file__).parent / argfile
+    with open(path) as f:
+        args_dict = json.load(f)
+
+    snr = np.squeeze(image[0].data)/np.squeeze(rms[0].data)
+    mask = np.zeros(snr.shape)
+    mask[snr > args_dict['process_image']['thresh_isl']] = 1
+
+    # Store in existing HDU and write to fits
+    rms[0].data[0,0,:,:] = mask
+
+    outfile = imname+'_mask.fits'
+    print(f'Wrote mask file to {outfile}')
+    rms.writeto(outfile, overwrite=True)
+
+def write_crtf_mask(imname, regions, size=1.0):
     """
     Write an output file containing sources to mask
 
@@ -250,6 +279,7 @@ def write_mask(outfile, regions, size=1.0):
             region.height *= size
             region.width *= size
 
+    outfile = imname+'_mask.crtf'
     print(f'Wrote mask file to {outfile}')
     regions.write(outfile, format='crtf')
 
@@ -258,10 +288,9 @@ def plot_sf_results(image_file, imname, regions, max_sep, plot, flag_regions=Non
     Plot the results of the sourcefinding
     '''
     image = helpers.open_fits_casa(image_file)
-    if rms_image is not None:
-        rms = helpers.open_fits_casa(rms_image)
-    else:
-        rms = helpers.open_fits_casa(imname+'_rms.fits')
+    if rms_image is None:
+        rms_image = imname+'_rms.fits'
+    rms = helpers.open_fits_casa(rms_image)
 
     img = image[0].data[0,0,:,:]
     rms_img = rms[0].data[0,0,:,:]
@@ -373,7 +402,12 @@ def main():
 
     if mode.lower() in 'masking':
         bdsf_regions = catalog_to_regions(bdsf_cat)
-        write_mask(imname+'_mask.crtf', regions=bdsf_regions, size=size)
+        write_crtf_mask(imname, bdsf_regions, size)
+        write_fits_mask(imname, inpimage, bdsf_args, rms_image)
+
+        if plot:
+            plot_sf_results(inpimage, imname, bdsf_regions, max_separation, 
+                            plot, rms_image=rms_image)
 
     # Make sure the log file is in the output folder
     logname = inpimage+'.pybdsf.log'
