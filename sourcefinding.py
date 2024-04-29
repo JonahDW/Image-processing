@@ -236,7 +236,7 @@ def catalog_to_regions(catalog, ra='RA', dec='DEC', majax='Maj', minax='Min', PA
                          angle=source[PA]*u.deg) for source in catalog])
     return regions
 
-def write_fits_mask(imname, image_file, argfile, rms_image=None):
+def write_fits_mask(imname, image_file, thresh_isl, rms_image=None):
     """
     Write an output fits containing binary mask
 
@@ -250,13 +250,9 @@ def write_fits_mask(imname, image_file, argfile, rms_image=None):
         rms_image = imname+'_rms.fits'
     rms = helpers.open_fits_casa(rms_image)
 
-    path = Path(__file__).parent / argfile
-    with open(path) as f:
-        args_dict = json.load(f)
-
     snr = np.squeeze(image[0].data)/np.squeeze(rms[0].data)
     mask = np.zeros(snr.shape)
-    mask[snr > args_dict['process_image']['thresh_isl']] = 1
+    mask[snr > thresh_isl] = 1
 
     # Store in existing HDU and write to fits
     rms[0].data[0,0,:,:] = mask
@@ -283,7 +279,7 @@ def write_crtf_mask(imname, regions, size=1.0):
     print(f'Wrote mask file to {outfile}')
     regions.write(outfile, format='crtf')
 
-def plot_sf_results(image_file, imname, regions, max_sep, plot, flag_regions=None, rms_image=None):
+def plot_sf_results(image_file, imname, regions, max_sep, plot, plot_isl, thresh_isl, rms_image=None, flag_regions=None):
     '''
     Plot the results of the sourcefinding
     '''
@@ -305,6 +301,9 @@ def plot_sf_results(image_file, imname, regions, max_sep, plot, flag_regions=Non
     for region in regions:
         patch = region.to_pixel(wcs).as_artist(facecolor='none', edgecolor='m', lw=0.25)
         ax.add_patch(patch)
+
+    if plot_isl:
+        ax.contour(img/rms_img, origin='lower', colors='royalblue', levels=[thresh_isl], linewidths=0.25)
 
     if flag_regions is not None:
         for region in flag_regions:
@@ -333,6 +332,7 @@ def main():
     mode = args.mode
     size = args.size
     plot = args.plot
+    plot_isl = args.plot_isl
     outdir = args.outdir
     output_format = args.output_format
     spectral_index = args.spectral_index
@@ -380,19 +380,26 @@ def main():
         bdsf_cat = Table.read(outcat, comment='#', delimiter=',',
                               format='ascii.commented_header', header_start=4)
 
+    # Get the island threshold for later use
+    path = Path(__file__).parent / bdsf_args
+    with open(path) as f:
+        args_dict = json.load(f)
+    thresh_isl = args_dict['process_image']['thresh_isl']
+
     # Determine output by mode
     if mode.lower() in 'cataloging':
-        bdsf_cat = transform_cat(bdsf_cat, img, max_separation, flag_artefacts, pointing, survey)
+        bdsf_cat = transform_cat(bdsf_cat, img, max_separation, 
+                                flag_artefacts, pointing, survey)
         bdsf_regions = catalog_to_regions(bdsf_cat)
 
         if plot:
             if flag_artefacts:
                 flag_regions = catalog_to_regions(bdsf_cat[bdsf_cat['Flag_Artifact'] == True])
                 plot_sf_results(inpimage, imname, bdsf_regions, max_separation, 
-                                plot, flag_regions, rms_image)
+                                plot, plot_isl, thresh_isl, rms_image, flag_regions)
             else:
-                plot_sf_results(inpimage, imname, bdsf_regions, 
-                                max_separation, plot, rms_image=rms_image)
+                plot_sf_results(inpimage, imname, bdsf_regions, max_separation, 
+                                plot, plot_isl, thresh_isl, rms_image)
 
         if spectral_index:
             bdsf_cat = read_alpha(inpimage, spectral_index, bdsf_cat, bdsf_regions)
@@ -403,11 +410,11 @@ def main():
     if mode.lower() in 'masking':
         bdsf_regions = catalog_to_regions(bdsf_cat)
         write_crtf_mask(imname, bdsf_regions, size)
-        write_fits_mask(imname, inpimage, bdsf_args, rms_image)
+        write_fits_mask(imname, inpimage, thresh_isl, rms_image)
 
         if plot:
             plot_sf_results(inpimage, imname, bdsf_regions, max_separation, 
-                            plot, rms_image=rms_image)
+                            plot, plot_isl, thresh_isl, rms_image)
 
     # Make sure the log file is in the output folder
     logname = inpimage+'.pybdsf.log'
@@ -441,6 +448,8 @@ def new_argument_parser():
                                 of the image with sources overlaid, optionally
                                 provide an output filename (default = do
                                 not plot the results).""")
+    parser.add_argument("--plot_isl", action='store_true',
+                        help="""Plot island boundaries along with source ellipses.""")
     parser.add_argument("--spectral_index", nargs="?", const=True,
                         help="""Measure the spectral indices of the sources using a specified
                                 spectral index image. Can be FITS or CASA format.

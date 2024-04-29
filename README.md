@@ -8,10 +8,8 @@ This code makes extensive use `astropy` and uses PyBDSF and its dependencies for
 
 PyBDSF requires an installation of `python-casacore`, and for it directly work on CASA images measures data is required to be somewhere on your system. As specified on the [`casacore`](https://github.com/casacore/casacore) github:
 
-Various parts of casacore require measures data, which requires regular
-updating. You can obtain the WSRT measures archive from the ASTRON FTP server:
-ftp://ftp.astron.nl/outgoing/Measures/
-Extract this somewhere on a permanent location on your filesystem.
+> Various parts of casacore require measures data, which requires regular updating. You can obtain the WSRT measures archive from the ASTRON FTP server: ftp://ftp.astron.nl/outgoing/Measures/. 
+> Extract this somewhere on a permanent location on your filesystem.
 
 ## Docker/singularity image
 
@@ -30,11 +28,12 @@ Choose between outputting a catalog of sources or a mask file of Gaussians. Inpu
 Will perform sourcefinding on the image `myimage.image` and produce both a fits source catalog and kvis annotation file. A plot will be produced showing the image and the sources as ellipses overlaid. All sources in the catalog will be given according to IAU conventions with the survey name prepended.
 
 ```
-usage: sourcefinding.py [-h] [-o OUTPUT_FORMAT [OUTPUT_FORMAT ...]] [-s SIZE]
-                        [--plot [PLOT]] [--spectral_index [SPECTRAL_INDEX]]
+usage: sourcefinding.py [-h] [-o OUTPUT_FORMAT [OUTPUT_FORMAT ...]]
+                        [--outdir OUTDIR] [--size SIZE] [--plot [PLOT]]
+                        [--plot_isl] [--spectral_index [SPECTRAL_INDEX]]
                         [--max_separation MAX_SEPARATION] [--flag_artefacts]
                         [--rms_image RMS_IMAGE] [--survey SURVEY]
-                        [--redo_catalog REDO_CATALOG]
+                        [--pointing POINTING] [--redo_catalog REDO_CATALOG]
                         mode image
 
 positional arguments:
@@ -55,11 +54,14 @@ optional arguments:
                         formats source list can be used for further
                         processing. Input can be multiple entries, e.g. -o
                         fits:srl ds9 (default = fits:srl).
-  -s SIZE, --size SIZE  If masking, multiply the size of the masks by this
+  --outdir OUTDIR       Name of directory to place output, default is the
+                        image directory.
+  --size SIZE           If masking, multiply the size of the masks by this
                         amount (default = 1.0).
   --plot [PLOT]         Plot the results of the sourcefinding as a png of the
                         image with sources overlaid, optionally provide an
                         output filename (default = do not plot the results).
+  --plot_isl            Plot island boundaries along with source ellipses.
   --spectral_index [SPECTRAL_INDEX]
                         Measure the spectral indices of the sources using a
                         specified spectral index image. Can be FITS or CASA
@@ -74,6 +76,9 @@ optional arguments:
                         Specify RMS alternative image to use for plotting
                         (default = use RMS image from sourcefinding)
   --survey SURVEY       Name of the survey to be used in source ids.
+  --pointing POINTING   Name of the pointing to be used in the pointing id. If
+                        not specified this is taken from the 'OBJECT' header
+                        flag.
   --redo_catalog REDO_CATALOG
                         Specify catalog file if you want some part of the
                         process to be redone, but want to skip sourcefinding
