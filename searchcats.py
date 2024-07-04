@@ -14,12 +14,6 @@ from astropy.io import ascii
 from astropy.table import Table, vstack, join, Column
 from astropy.coordinates import SkyCoord, Angle
 
-FIRSTCATURL='http://sundog.stsci.edu/cgi-bin/searchfirst'
-NVSSCATURL='http://www.cv.nrao.edu/cgi-bin/NVSSlist.pl'
-SUMSSCATURL='http://www.astrop.physics.usyd.edu.au/sumsscat/sumsscat.Mar-11-2008'
-TGSSCATURL='https://vo.astron.nl/tgssadr/q/cone/scs.xml'
-RACSCATURL = 'https://casda.csiro.au/casda_vo_tools/scs/racs_dr1_sources_galacticcut_v2021_08_v01'
-
 def geturl(url,params,timeout,tries=5):
     '''
     Attempt to obtain open a url
@@ -54,6 +48,8 @@ def getsumssdata(ra,dec,offset):
     '''
     Get the SUMSS catalogue at a given position.
     '''
+    SUMSSCATURL='http://www.astrop.physics.usyd.edu.au/sumsscat/sumsscat.Mar-11-2008'
+
     def reduce_sumssfile(sumssfile, ra, dec, offset):
         '''
         Reduce the SUMSS file by filtering RA as the catalog
@@ -140,14 +136,14 @@ def getfirstdata(ra,dec,offset):
     produce a list of all of the FIRST data at given position. An empty array is returned
     if there is nothing. Else the returned array contains [[source data 1],[source data 2],...]
     '''
-
+    first_url='http://sundog.stsci.edu/cgi-bin/searchfirst'
     firstdata=[]
 
     firstparams = urllib.parse.urlencode({'RA': ' '.join(ra+dec),
                                           'Radius': offset,
                                           'Text':1,
                                           'Equinox': 'J2000'})
-    firsturl = geturl(FIRSTCATURL,firstparams,10)
+    firsturl = geturl(first_url,firstparams,10)
 
     if not firsturl:
         print("No FIRST data available.")
@@ -186,7 +182,7 @@ def getfirstdata(ra,dec,offset):
                                               'Equinox': 'J2000',
                                               'PStart':x*500,
                                               '.cgifields': 'Text'})
-        firsturl = geturl(FIRSTCATURL,firstparams,10)
+        firsturl = geturl(first_url,firstparams,10)
         urldata = firsturl.split('\n')
 
         table = ascii.read(urldata,
@@ -233,6 +229,8 @@ def getnvssdata(ra,dec,offset):
     produce a list of all of the NVSS data at given position. An empty array is returned
     if there is nothing. Else the reutrned array contains [[source data 1],[source data 2],...]
     '''
+    nvss_url='http://www.cv.nrao.edu/cgi-bin/NVSSlist.pl'
+
     def filternvssfile(nvssurl):
         '''
         Extact only the lines containing data from the url data
@@ -272,7 +270,7 @@ def getnvssdata(ra,dec,offset):
                                              'RA': ' '.join(ra),
                                              'Dec': ' '.join(dec),
                                              'searchrad':offset})
-        nvssfiturl = geturl(NVSSCATURL,nvssparams,10)
+        nvssfiturl = geturl(nvss_url,nvssparams,10)
         nvssfiturldata = nvssfiturl.split('\n')
 
         nvssdata=filternvssfile(nvssfiturldata)
@@ -338,8 +336,10 @@ def getnvssdata(ra,dec,offset):
 
 def gettgssdata(central_coord,offset):
     import pyvo as vo
+
     # Open vo service
-    tgss = vo.dal.SCSService(TGSSCATURL)
+    tggs_url='https://vo.astron.nl/tgssadr/q/cone/scs.xml'
+    tgss = vo.dal.SCSService(tgss_url)
 
     # Search around coordinates
     tgssresults = tgss.search(pos=central_coord, radius=offset, verbosity=3)
@@ -356,17 +356,46 @@ def gettgssdata(central_coord,offset):
 
     return tgsstable
 
-def getracsdata(central_coord,offset):
+def getracslowdata(central_coord,offset):
     import pyvo as vo
+
     # Open vo service
-    racs = vo.dal.SCSService(RACSCATURL)
+    racslow_url = 'https://casda.csiro.au/casda_vo_tools/scs/racs_dr1_sources_galacticcut_v2021_08_v02'
+    racslow_galactic_url = 'https://casda.csiro.au/casda_vo_tools/scs/racs_dr1_sources_galacticregion_v2021_08_v02'
+    racs = vo.dal.SCSService(racslow_url)
 
     # Search around coordinates
     racsresults = racs.search(pos=central_coord, radius=offset, verbosity=3, timeout=10)
     racstable = racsresults.to_table()
 
     if len(racstable) == 0:
-        print("No RACS data available.")
+        print("No RACS-low data found, trying galactic region")
+
+        racs = vo.dal.SCSService(racslow_galactic_url)
+
+        # Search around coordinates
+        racsresults = racs.search(pos=central_coord, radius=offset, verbosity=3, timeout=10)
+        racstable = racsresults.to_table()
+
+        if len(racstable) == 0:
+            print("No RACS-low data available.")
+            sys.exit()
+
+    return racstable
+
+def getracsmiddata(central_coord,offset):
+    import pyvo as vo
+
+    # Open vo service
+    racsmid_url = 'https://casda.csiro.au/casda_vo_tools/scs/racs_mid_sources_v01'
+    racs = vo.dal.SCSService(racsmid_url)
+
+    # Search around coordinates
+    racsresults = racs.search(pos=central_coord, radius=offset, verbosity=3, timeout=10)
+    racstable = racsresults.to_table()
+
+    if len(racstable) == 0:
+        print("No RACS-mid data available.")
         sys.exit()
 
     return racstable

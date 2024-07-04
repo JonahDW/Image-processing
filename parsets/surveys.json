@@ -69,7 +69,7 @@
 			"freq" : 150.0
 		}
 	},
-	"RACS" : {
+	"RACS-low" : {
 		"data_columns" : {
 			"ra" : "ra",
 			"dec" : "dec",
@@ -84,6 +84,23 @@
 			"BMIN" : 25.0,
 			"BPA" : 0.0,
 			"freq" : 887.5
+		}
+	},
+	"RACS-mid" : {
+		"data_columns" : {
+			"ra" : "ra",
+			"dec" : "dec",
+			"majax" : "maj_axis",
+			"minax" : "min_axis",
+			"pa" : "pa",
+			"peak_flux" : "peak_flux",
+			"total_flux" : "total_flux"
+		},
+		"properties" : {
+			"BMAJ" : 25.0,
+			"BMIN" : 25.0,
+			"BPA" : 0.0,
+			"freq" : 1367.5
 		}
 	}
 }

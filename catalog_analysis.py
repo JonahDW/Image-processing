@@ -248,16 +248,17 @@ class Catalog:
         '''
         Plot fraction of resolved sources
         '''
+        cal_error = 0.0
 
         if stacked_cat:
             resolved_idx = self.table['Resolved']
         else:
             # Calculate errors on total flux and peak flux
-            sigma_s = np.sqrt(self.table['E_'+self.flux_col]**2 + (0.03*self.table[self.flux_col])**2)
-            sigma_speak = np.sqrt(self.table['E_Peak_flux']**2 + (0.03*self.table['Peak_flux'])**2)
+            sigma_s = np.sqrt(self.table['E_'+self.flux_col]**2 + (cal_error*self.table[self.flux_col])**2)
 
             sigma_r = np.sqrt((sigma_s/self.table[self.flux_col])**2
-                            + (sigma_speak/self.table['Peak_flux'])**2)
+                            - (self.table['E_Peak_flux']/self.table['Peak_flux'])**2
+                            + (self.table['Isl_rms']/self.table['Peak_flux'])**2)
 
             f = resolved_sigma
             with warnings.catch_warnings():

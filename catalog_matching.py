@@ -365,12 +365,12 @@ class Pointing:
 
         return tgsstable
 
-    def query_RACS(self):
+    def query_RACSlow(self):
         '''
         Match the pointing to the RACS catalog
         '''
-        racstable = sc.getracsdata(central_coord = self.center,
-                                   offset = 0.5*self.uncorrected_fov)
+        racstable = sc.getracslowdata(central_coord = self.center,
+                                      offset = 0.5*self.uncorrected_fov)
 
         racstable['maj_axis']   = racstable['maj_axis'].to(u.deg)
         racstable['min_axis']   = racstable['min_axis'].to(u.deg)
@@ -389,6 +389,34 @@ class Pointing:
         racstable['e_total_flux_source']        /= 1e3
         racstable['e_peak_flux']                /= 1e3
         racstable['noise']                      /= 1e3
+
+        return racstable
+
+    def query_RACSmid(self):
+        '''
+        Match the pointing to the RACS catalog
+        '''
+        racstable = sc.getracsmiddata(central_coord = self.center,
+                                      offset = 0.5*self.uncorrected_fov)
+
+        racstable['maj_axis']   = racstable['maj_axis'].to(u.deg)
+        racstable['min_axis']   = racstable['min_axis'].to(u.deg)
+        racstable['e_maj_axis'] = racstable['e_maj_axis'].to(u.deg)
+        racstable['e_min_axis'] = racstable['e_min_axis'].to(u.deg)
+
+        racstable['dc_maj_axis']   = racstable['dc_maj_axis'].to(u.deg)
+        racstable['dc_min_axis']   = racstable['dc_min_axis'].to(u.deg)
+        racstable['e_dc_maj_axis'] = racstable['e_dc_maj_axis'].to(u.deg)
+        racstable['e_dc_min_axis'] = racstable['e_dc_min_axis'].to(u.deg)
+
+        # Convert to Jy
+        racstable['total_flux']          /= 1e3
+        racstable['e_total_flux_pybdsf'] /= 1e3
+        racstable['e_total_flux']        /= 1e3
+        racstable['peak_flux']           /= 1e3
+        racstable['e_peak_flux']         /= 1e3
+        racstable['e_peak_flux_pybdsf']  /= 1e3
+        racstable['noise']               /= 1e3
 
         return racstable
 
@@ -793,8 +821,11 @@ def main():
     elif ext_cat == 'TGSS':
         ext_table = pointing.query_TGSS()
         ext_catalog = ExternalCatalog(ext_cat, ext_table, pointing.center)
-    elif ext_cat == 'RACS':
-        ext_table = pointing.query_RACS()
+    elif ext_cat == 'RACS-low':
+        ext_table = pointing.query_RACSlow()
+        ext_catalog = ExternalCatalog(ext_cat, ext_table, pointing.center)
+    elif ext_cat == 'RACS-mid':
+        ext_table = pointing.query_RACSmid()
         ext_catalog = ExternalCatalog(ext_cat, ext_table, pointing.center)
     elif os.path.exists(ext_cat):
         ext_table = Table.read(ext_cat)
