@@ -1,31 +1,23 @@
 # Image processing
 
-The purpose of this module is to process a radio astronomical image in sourcefinding.py, where you can choose to either output a catalog of sources or output a mask file compatible with CASA for further data reduction. If the choice is to catalog, catalog_matching.py can match the output catalog (or any catalog created by PyBDSF) to external catalogs such as NVSS, SUMSS or FIRST, or even a user specified file. This allows one to check systematics such as the flux ratio (to check the primary beam) or the astrometric offsets.
-
-This code makes extensive use `astropy` and uses PyBDSF and its dependencies for its sourcefinding, which can be found [here](https://github.com/lofar-astron/PyBDSF). Furthermore the [`regions`](https://github.com/astropy/regions) astropy package is utilised in order to create the CASA mask files. Make sure to install the regions package directly from git as earlier versions do not correctly export the regions to the CASA mask files!
-
-```pip install git+https://github.com/astropy/regions.git```
-
-PyBDSF requires an installation of `python-casacore`, and for it directly work on CASA images measures data is required to be somewhere on your system. As specified on the [`casacore`](https://github.com/casacore/casacore) github:
+The purpose of this module is to allow easy source extraction, catalog creation, cross matching and further analysis of a radio astronomical image. This code makes extensive use `astropy` and uses [PyBDSF](https://github.com/lofar-astron/PyBDSF) and its dependencies for its sourcefinding. PyBDSF requires an installation of `python-casacore`, and for it directly work on CASA images measures data is required to be somewhere on your system. As specified on the [`casacore`](https://github.com/casacore/casacore) github:
 
 > Various parts of casacore require measures data, which requires regular updating. You can obtain the WSRT measures archive from the ASTRON FTP server: ftp://ftp.astron.nl/outgoing/Measures/. 
 > Extract this somewhere on a permanent location on your filesystem.
+
+Furthermore the [`regions`](https://github.com/astropy/regions) astropy package is utilised in order if creating CASA mask files. The following scripts have a lot of flexibility built in, for a simple recipe of how a full run of this software would look on an image, example bash scripts are present in the `example_scripts` folder.
 
 ## Docker/singularity image
 
 If you want to avoid doing all the installations or don't have the permissions to do so, there is an accompanying docker image for this module in my [`sourcefinding-docker`](https://github.com/JonahDW/sourcefinding-docker) repository. Details on how to obtain the image are found there.
 
-## Scripts 
-
-The following scripts have a lot of flexibility built in, for a simple recipe of how a full run of this software would look on an image, example bash scripts are present in the `example_scripts` folder.
-
 ## sourcefinding.py
 
-Choose between outputting a catalog of sources or a mask file of Gaussians. Input parameters for PyBDSF are located in `bdsf_args_cat.json` and `bdsf_args_mask.json` in the `parsets` folder for cataloging and masking respectively. For example
+Perform source extraction on an image, either outputting a catalog of sources or a mask file of Gaussian components. Input parameters for PyBDSF are located in `bdsf_args_cat.json` and `bdsf_args_mask.json` in the `parsets` folder for cataloging and masking respectively. For example
 
-```python sourcefinding.py catalog myimage.image -o fits:srl kvis --plot --survey MALS```
+```python sourcefinding.py catalog <my_image> -o fits:srl ds9 --plot```
 
-Will perform sourcefinding on the image `myimage.image` and produce both a fits source catalog and kvis annotation file. A plot will be produced showing the image and the sources as ellipses overlaid. All sources in the catalog will be given according to IAU conventions with the survey name prepended.
+Will perform sourcefinding on `<my_image>` and produce both a fits source catalog and DS9 region file. A plot will be produced showing the image and the sources as ellipses overlaid. 
 
 ```
 usage: sourcefinding.py [-h] [-o OUTPUT_FORMAT [OUTPUT_FORMAT ...]]
@@ -86,13 +78,13 @@ optional arguments:
 
 ## catalog_matching.py
 
-Match a PyBDSF catalog to an external catalog. Choices are between NVSS, SUMSS and FIRST, or a specified catalog file (mileage may vary for this option). Different types of plots can be made to judge the systematics in the catalog. For example
+Match a catalog produced with `sourcefinding.py` to an external catalog. Currently, available choices are NVSS, SUMSS, FIRST, RACS-low, RACS-mid or a specified catalog file (mileage may vary for this option). Different types of plots can be made to judge the systematics in the catalog. For example
 
 ```catalog_matching.py myimage_catalog.fits NVSS --astro --flux```
 
 Will match the catalog `myimage_catalog.fits` to an external catalog, in this case the NVSS. The matched catalog is put out, and additionally plots are produced with the astrometric and flux offsets between the sources in the image. 
 
-Matching can also be done with a local catalog. If the name of the other catalog contains `bdsfcat`, the catalog is assumed to be one generated by these scripts as well, and will be automatically handled. If this is not the case, relevant information about the catalog, such as the names of columns and the shape of the beam must be put in the `parsets/extcat.json` file by hand in order for the file to properly handled by the script.
+Matching can also be done with a local catalog. If the name of the other catalog contains `bdsfcat`, the catalog is assumed to be one generated by `sourcefinding.py` as well, and will be automatically handled. If this is not the case, relevant information about the catalog, such as the names of columns and the shape of the beam must be put in the `parsets/extcat.json` file by hand in order for the file to properly handled by the script.
 
 ```
 usage: catalog_matching.py [-h] [--match_sigma_extent MATCH_SIGMA_EXTENT]
@@ -172,12 +164,7 @@ optional arguments:
 
 ## source_catalogue_crusher.py
 
-The purpose of this tool is to mark individual sources in the catalogue not to be used. So essentailly to clean up the catalogue or specify sources to be used in the next steps e.g. in the catalog matching.
-
-It also can generate a KVIS annotation file and provide easy way to edit the Quality flag in the catalogue. The following example will generate a KVIS annotation file.
-
-```python sourcefinding.py --CAT_FILE=CATALOUGE.fits --KVISANNOUTPUT=CATALOUGE```
-
+The purpose of this tool is to mark sources in the catalog not to be used. It can be used to clean up the catalog or specify sources to be used in other steps such as catalog matching. It does this through the `Quality_flag` column in the catalog, and this provides an easy way to edit this column in the catalog. 
 
 ```
 Usage: source_catalogue_crusher.py [options]
@@ -232,7 +219,7 @@ Options:
 
 ## catalog_analysis.py
 
-Analyze a PyBDSF catalog with different metrics regularly applied to radio astronomical data, like source counts and fraction of resolved sources. For example
+Analyze a PyBDSF catalog with different metrics regularly applied to radio astronomical data, like source counts and fraction of resolved sources.  For example
 
 ```python catalog_analysis.py myimage_catalog.fits -r myimage_rms.fits```
 

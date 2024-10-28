@@ -3,7 +3,7 @@
         "thresh_isl" : 3.0,
         "thresh_pix" : 5.0,
         "group_by_isl" : true,
-        "rms_box" : "(150,15)",
+        "rms_box" : "(250,30)",
         "adaptive_rms_box" : true,
         "adaptive_thresh" : 50.0,
         "rms_box_bright" : null,
@@ -12,9 +12,9 @@
 		"atrous_jmax" : 3
     },
     "export_image" : {
-        "ch0" : true,
+        "ch0" : false,
         "rms" : true,
-        "mean" : true,
+        "mean" : false,
         "pi" : false,
         "gaus_resid" : true,
         "shap_resid" : false,
