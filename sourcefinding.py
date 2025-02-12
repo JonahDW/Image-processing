@@ -288,8 +288,8 @@ def plot_sf_results(image_file, imname, regions, max_sep, plot, plot_isl, thresh
         rms_image = imname+'_rms.fits'
     rms = helpers.open_fits_casa(rms_image)
 
-    img = image[0].data[0,0,:,:]
-    rms_img = rms[0].data[0,0,:,:]
+    img = np.squeeze(image[0].data)
+    rms_img = np.squeeze(rms[0].data)
     wcs = WCS(image[0].header, naxis=2)
 
     fig = plt.figure(figsize=(20,20))
