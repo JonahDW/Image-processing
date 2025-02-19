@@ -19,10 +19,10 @@
 		"total_flux" : "mJy"
  	},
     "properties" : {
-        "_comment" : "BMAJ and BMIN in arcmin, BPA in degrees, freq in MHz",
-        "BMAJ" : 8.9,
-        "BMIN" : 8.9,
+        "_comment" : "BMAJ and BMIN in arcsec, BPA in degrees, freq in MHz",
+        "BMAJ" : 45.0,
+        "BMIN" : 45.0,
         "BPA" : 90.0,
-        "freq" : 2307.0
+        "freq" : 1400.0
     }
 }

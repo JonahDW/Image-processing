@@ -334,45 +334,6 @@ def getnvssdata(ra,dec,offset):
 
     return nvsstable
 
-def gettgssdata(central_coord,offset):
-    import pyvo as vo
-
-    # Open vo service
-    tggs_url='https://vo.astron.nl/tgssadr/q/cone/scs.xml'
-    tgss = vo.dal.SCSService(tgss_url)
-
-    # Search around coordinates
-    tgssresults = tgss.search(pos=central_coord, radius=offset, verbosity=3)
-    tgsstable = tgssresults.to_table()
-
-    # Replace object columns because TGSS is horrible
-    for col in tgsstable.colnames:
-        if tgsstable[col].dtype == object:
-            tgsstable[col] = tgsstable[col].astype('str')
-
-    if len(tgsstable) == 0:
-        print("No TGSS data available.")
-        sys.exit()
-
-    return tgsstable
-
-def getracsmiddata(central_coord,offset):
-    import pyvo as vo
-
-    # Open vo service
-    racsmid_url = 'https://casda.csiro.au/casda_vo_tools/scs/racs_mid_sources_v01'
-    racs = vo.dal.SCSService(racsmid_url)
-
-    # Search around coordinates
-    racsresults = racs.search(pos=central_coord, radius=offset, verbosity=3, timeout=10)
-    racstable = racsresults.to_table()
-
-    if len(racstable) == 0:
-        print("No RACS-mid data available.")
-        sys.exit()
-
-    return racstable
-
 def getracslowdata(central_coord,offset):
     import pyvo as vo
 

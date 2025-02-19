@@ -15,7 +15,7 @@ from astropy.table import Table, join
 from astropy.coordinates import SkyCoord
 
 import matplotlib
-#matplotlib.use('Agg')
+matplotlib.use('Agg')
 from matplotlib import colors
 import matplotlib.pyplot as plt
 from matplotlib.patches import Ellipse
