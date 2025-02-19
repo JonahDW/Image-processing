@@ -1,6 +1,6 @@
 {
 	"FIRST" : {
-		"data_columns" : {
+		"columns" : {
 			"ra" : "RA",
 			"dec" : "DEC",
 			"majax" : "Majax",
@@ -8,6 +8,13 @@
 			"pa" : "PosAng",
 			"peak_flux" : "Peak flux",
 			"total_flux" : "Int flux"
+	 	},
+		"units" : {
+			"majax" : "arcsec",
+			"minax" : "arcsec",
+			"pa" : "deg",
+			"peak_flux" : "mJy/beam",
+			"total_flux" : "mJy"
 	 	},
 		"properties" : {
 			"BMAJ" : 6.4,
@@ -19,7 +26,7 @@
 		}
 	},
 	"NVSS" : {
-		"data_columns" : {
+		"columns" : {
 			"ra" : "RA",
 			"dec" : "DEC",
 			"majax" : "Major",
@@ -28,6 +35,15 @@
 			"peak_flux" : "Peak_flux",
 			"total_flux" : "Total_flux"
 		},
+		"units" : {
+			"ra" : "deg",
+			"dec" : "deg",
+			"majax" : "arcsec",
+			"minax" : "arcsec",
+			"pa" : "deg",
+			"peak_flux" : "mJy/beam",
+			"total_flux" : "mJy"
+	 	},
 	"properties" : {
 			"BMAJ" : 45.0,
 			"BMIN" : 45.0,
@@ -36,7 +52,7 @@
 		}
 	},
 	"SUMSS" : {
-		"data_columns" : {
+		"columns" : {
 			"ra" : "RA",
 			"dec" : "DEC",
 			"majax" : "Fit_Major_Axis",
@@ -45,6 +61,13 @@
 			"peak_flux" : "Flux_36_cm",
 			"total_flux" : "Int_Flux_36_cm"
 		},
+		"units" : {
+			"majax" : "arcsec",
+			"minax" : "arcsec",
+			"pa" : "deg",
+			"peak_flux" : "mJy/beam",
+			"total_flux" : "mJy"
+	 	},
 		"properties" : {
 			"BMAJ" : 43.0,
 			"BMIN" : 43.0,
@@ -53,7 +76,7 @@
 		}
 	},
 	"TGSS" : {
-		"data_columns" : {
+		"columns" : {
 			"ra" : "RA",
 			"dec" : "DEC",
 			"majax" : "MAJAX",
@@ -62,6 +85,10 @@
 			"peak_flux" : "Spk",
 			"total_flux" : "Sint"
 		},
+		"units" : {
+			"peak_flux" : "mJy/beam",
+			"total_flux" : "mJy"
+	 	},
 		"properties" : {
 			"BMAJ" : 25.0,
 			"BMIN" : 25.0,
@@ -70,7 +97,7 @@
 		}
 	},
 	"RACS-low" : {
-		"data_columns" : {
+		"columns" : {
 			"ra" : "ra",
 			"dec" : "dec",
 			"majax" : "maj_axis",
@@ -79,6 +106,10 @@
 			"peak_flux" : "peak_flux",
 			"total_flux" : "total_flux_source"
 		},
+		"units" : {
+			"peak_flux" : "mJy/beam",
+			"total_flux" : "mJy"
+	 	},
 		"properties" : {
 			"BMAJ" : 25.0,
 			"BMIN" : 25.0,
@@ -87,7 +118,7 @@
 		}
 	},
 	"RACS-mid" : {
-		"data_columns" : {
+		"columns" : {
 			"ra" : "ra",
 			"dec" : "dec",
 			"majax" : "maj_axis",
@@ -96,6 +127,10 @@
 			"peak_flux" : "peak_flux",
 			"total_flux" : "total_flux"
 		},
+		"units" : {
+			"peak_flux" : "mJy/beam",
+			"total_flux" : "mJy"
+	 	},
 		"properties" : {
 			"BMAJ" : 25.0,
 			"BMIN" : 25.0,

@@ -107,8 +107,9 @@ def get_properties(identity, ra_center, dec_center):
             BMaj = BMaj/np.cos(np.radians(dec_center-19))
 
     beam = [BMaj,BMin,BPA]
-    columns = cat_dict['data_columns']
-    return beam, freq, columns
+    columns = cat_dict['columns']
+    units = cat_dict['units']
+    return beam, freq, columns, units
 
 def measure_image_regions(pixel_regions, image, weight_image=None, weight_regions=None):
     '''

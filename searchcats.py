@@ -356,6 +356,23 @@ def gettgssdata(central_coord,offset):
 
     return tgsstable
 
+def getracsmiddata(central_coord,offset):
+    import pyvo as vo
+
+    # Open vo service
+    racsmid_url = 'https://casda.csiro.au/casda_vo_tools/scs/racs_mid_sources_v01'
+    racs = vo.dal.SCSService(racsmid_url)
+
+    # Search around coordinates
+    racsresults = racs.search(pos=central_coord, radius=offset, verbosity=3, timeout=10)
+    racstable = racsresults.to_table()
+
+    if len(racstable) == 0:
+        print("No RACS-mid data available.")
+        sys.exit()
+
+    return racstable
+
 def getracslowdata(central_coord,offset):
     import pyvo as vo
 
@@ -383,19 +400,14 @@ def getracslowdata(central_coord,offset):
 
     return racstable
 
-def getracsmiddata(central_coord,offset):
+def getvodata(url, central_coord, offset):
     import pyvo as vo
 
     # Open vo service
-    racsmid_url = 'https://casda.csiro.au/casda_vo_tools/scs/racs_mid_sources_v01'
-    racs = vo.dal.SCSService(racsmid_url)
+    data = vo.dal.SCSService(url)
 
     # Search around coordinates
-    racsresults = racs.search(pos=central_coord, radius=offset, verbosity=3, timeout=10)
-    racstable = racsresults.to_table()
+    search_results = data.search(pos=central_coord, radius=offset, verbosity=3, timeout=10)
+    data_table = search_results.to_table()
 
-    if len(racstable) == 0:
-        print("No RACS-mid data available.")
-        sys.exit()
-
-    return racstable
+    return data_table

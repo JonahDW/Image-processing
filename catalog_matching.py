@@ -15,7 +15,7 @@ from astropy.table import Table, join
 from astropy.coordinates import SkyCoord
 
 import matplotlib
-matplotlib.use('Agg')
+#matplotlib.use('Agg')
 from matplotlib import colors
 import matplotlib.pyplot as plt
 from matplotlib.patches import Ellipse
@@ -31,64 +31,61 @@ gc.enable()
 
 class SourceEllipse:
 
-    def __init__(self, catalog_entry, column_dict):
-        self.RA  = catalog_entry[column_dict['ra']]
-        self.DEC = catalog_entry[column_dict['dec']]
-        self.Maj = catalog_entry[column_dict['majax']]
-        self.Min = catalog_entry[column_dict['minax']]
-        self.PA  = catalog_entry[column_dict['pa']]
+    def __init__(self, catalog_entry):
+        self.RA  = catalog_entry['ra']
+        self.DEC = catalog_entry['dec']
+        self.Maj = catalog_entry['majax']
+        self.Min = catalog_entry['minax']
+        self.PA  = catalog_entry['pa']
 
-        if column_dict['peak_flux']:
-            self.PeakFlux = catalog_entry[column_dict['peak_flux']]
-        if column_dict['total_flux']:
-            self.IntFlux = catalog_entry[column_dict['total_flux']]
+        if 'peak_flux' in catalog_entry.colnames:
+            self.PeakFlux = catalog_entry['peak_flux']
+        if 'total_flux' in catalog_entry.colnames:
+            self.IntFlux = catalog_entry['total_flux']
 
         self.skycoord = SkyCoord(self.RA, self.DEC, unit='deg',frame='icrs')
 
     def match(self, ra_list, dec_list, maj_list, min_list, pa_list, sigma_extent, search_dist, header, overlap_percentage):
-        '''
+        """
         Match the ellipse with a (list of) source(s)
 
         Keyword arguments:
-        ra_list -- Right ascension of sources
-        dec_list -- Declination of sources
-        separation (float) - Additional range in degrees
-        '''
+        ra_list (array)  -- Right ascension of sources
+        dec_list (array) -- Declination of sources
+        maj_list (array) -- Major axis of FWHM of sources
+        min_list (array) -- Minor axis of FWHM of sources
+        pa_list (array)  -- Position angle of sources
+        sigma_extent (float) -- Source extent to match, as factor of sigma
+        search_dist (float)  -- Additional search radius, in degrees
+        header (wcsheader)   -- Image header
+        overlap_percentage (int) -- Minimum percentage overlap between ellipses 
+                                    required for two sources to be considered a match
+
+        Returns:
+        List of matches for source ellipse
+        """
         offset_coord   = SkyCoord(ra_list, dec_list, unit='deg')
         sky_separation = self.skycoord.separation(offset_coord)
 
         # this factor just increases the number of sources to check
-        # so no harm to the process
-        # is of the order of sub-arcsec
-        #
+        # so no harm to the process, it is of the order of sub-arcsec
         dra, ddec           = self.skycoord.spherical_offsets_to(offset_coord)
         deprojection_factor = (np.sqrt( (dra)**2 + (ddec)**2 ) / sky_separation).value
 
         # The Gaussians are given in FWHM Bmaj, Bmin
         # in order to obtain a source extend we use the 3 sigma extent
-        #
-        # https://ned.ipac.caltech.edu/level5/Leo/Stats2_3.html
-        #
         FWHM_to_sigma_extent = sigma_extent / (2*np.sqrt(2*np.log(2)))
 
         # Check if sources match within Bmaj/2 boundaries
-        # these source could match or not this needs to
-        # be checked
-        #
-        # CAUTION: self is related to the external catalogue
-        #
         maj_match = sky_separation.value < FWHM_to_sigma_extent * deprojection_factor * (self.Maj/2. + maj_list/2.) + search_dist
 
         # Check if sources match within the smallest source extend
-        # these are the source we do not check further
-        #
+        # These are the source we do not check further
         get_minor_ext = self.Min < min_list
         minor_ext     = np.where(get_minor_ext, self.Min, min_list) 
-        #
         min_match     = sky_separation.value <=  FWHM_to_sigma_extent *  minor_ext
 
-        # Check out the source between the maj_match and min_match boundaries
-        #
+        # Check out the sources between the maj_match and min_match boundaries
         if max(np.array(np.where(np.logical_xor(min_match,maj_match))).shape) > 0:
 
             msource_idx = np.where(np.logical_xor(min_match,maj_match))[0].flatten()
@@ -98,7 +95,7 @@ class SourceEllipse:
                                                      FWHM_to_sigma_extent*self.Min,
                                                      self.PA, header)
 
-                to_sources   = helpers.ellipse_skyprojection(ra_list[s],dec_list[s],
+                to_sources = helpers.ellipse_skyprojection(ra_list[s],dec_list[s],
                                                      FWHM_to_sigma_extent*maj_list[s]+search_dist,
                                                      FWHM_to_sigma_extent*min_list[s]+search_dist,
                                                      pa_list[s], header)
@@ -181,14 +178,14 @@ class SourceEllipse:
         return np.where(maj_match)[0]
 
     def to_artist(self):
-        '''
+        """
         Convert the ellipse to a matplotlib artist
 
-        CAUTION definition in matplotlib is 
-        width is horizointal axis, height vertical axis, angle is anti-clockwise
+        CAUTION: Definition in matplotlib is 
+        width is horizontal axis, height vertical axis, angle is anti-clockwise
         in order to match the astronomical definition PA from North clockwise
         height is major axis, width is minor axis and angle is -PA
-        '''
+        """
         return Ellipse(xy = (self.RA, self.DEC),
                         width = self.Min,
                         height = self.Maj,
@@ -200,33 +197,74 @@ class ExternalCatalog:
         self.name = name
         self.cat = catalog
 
-        beam, freq, columns = helpers.get_properties(name, center.ra.deg, center.dec.deg)
+        # Get properties
+        beam, freq, column_dict, unit_dict = helpers.get_properties(name, center.ra.deg, center.dec.deg)
         self.BMaj  = beam[0]
         self.BMin  = beam[1]
         self.BPA   = beam[2]
         self.freq  = freq
 
-        if 'quality_flag' in columns:
+        # If quality flag is present, exclude flagged sources
+        if 'quality_flag' in column_dict:
             if columns['quality_flag']:
                 self.cat = self.cat[self.cat[columns['quality_flag']] == 1]
                 n_rejected = len(self.cat[self.cat[columns['quality_flag']] == 1])
                 if  n_rejected > 0:
                     print(f'Excluding {n_rejected} sources that have a negative quality flag')
 
-        self.sources = [SourceEllipse(source, columns) for source in self.cat]
+        # Create catalog for creating source ellipses
+        self.reduced_cat = Table()
+        for column in column_dict:
+            self.reduced_cat[column] = self.cat[column_dict[column]]
+            if column in unit_dict:
+                self.reduced_cat[column].unit = u.Unit(unit_dict[column])
 
-class Pointing:
+        # Sort out column units
+        self.reduced_cat['majax'] = self.reduced_cat['majax'].to(u.deg)
+        self.reduced_cat['minax'] = self.reduced_cat['minax'].to(u.deg)
+        self.reduced_cat['ra']    = self.reduced_cat['ra'].to(u.deg)
+        self.reduced_cat['dec']   = self.reduced_cat['dec'].to(u.deg)
+        if column_dict['peak_flux']:
+            self.reduced_cat['peak_flux'] = self.reduced_cat['peak_flux'].to(u.Jy/u.beam)
+        if column_dict['total_flux']:
+            self.reduced_cat['total_flux'] = self.reduced_cat['total_flux'].to(u.Jy)
+
+        self.sources = [SourceEllipse(source) for source in self.reduced_cat]
+
+class BDSFCatalog:
 
     def __init__(self, catalog, filename, survey_name=None, ra_center=None, dec_center=None, fov=None):
         self.dirname = os.path.dirname(filename)
+        self.cat = catalog
 
-        self.cat = catalog[catalog['Quality_flag'] == 1]
-        if len(self.cat) < len(catalog):
-            print(f'Excluding {len(catalog) - len(self.cat)} sources that have a negative quality flag')
+        # If quality flag is present, exclude flagged sources
+        if 'Quality_flag' in catalog.colnames:
+            self.cat = catalog[catalog['Quality_flag'] == 1]
+            if len(self.cat) < len(catalog):
+                print(f'Excluding {len(catalog) - len(self.cat)} sources that have a negative quality flag')
 
-        columns = {'ra':'RA','dec':'DEC','majax':'Maj','minax':'Min',
-                   'pa':'PA','peak_flux':'Peak_flux','total_flux':'Total_flux'}
-        self.sources = [SourceEllipse(source, columns) for source in self.cat]
+        # Define columns and units for PyBDSF catalog
+        column_dict = {'ra':'RA','dec':'DEC','majax':'Maj','minax':'Min',
+                       'pa':'PA','peak_flux':'Peak_flux','total_flux':'Total_flux'}
+        unit_dict = {'ra':'deg','dec':'deg','majax':'deg','minax':'deg',
+                     'pa':'deg','peak_flux':'Jy/beam','total_flux':'Jy'}
+
+        # Create catalog for creating source ellipses and other stuff
+        self.reduced_cat = Table()
+        for column in column_dict:
+            self.reduced_cat[column] = self.cat[column_dict[column]]
+            self.reduced_cat[column].unit = u.Unit(unit_dict[column])
+
+        # Sort out column units
+        self.reduced_cat['majax'] = self.reduced_cat['majax'].to(u.deg)
+        self.reduced_cat['minax'] = self.reduced_cat['minax'].to(u.deg)
+        self.reduced_cat['ra'] = self.reduced_cat['ra'].to(u.deg)
+        self.reduced_cat['dec'] = self.reduced_cat['dec'].to(u.deg)
+        if column_dict['peak_flux']:
+            self.reduced_cat['peak_flux'] = self.reduced_cat['peak_flux'].to(u.Jy/u.beam)
+        if column_dict['total_flux']:
+            self.reduced_cat['total_flux'] = self.reduced_cat['total_flux'].to(u.Jy)
+        self.sources = [SourceEllipse(source) for source in self.reduced_cat]
 
         # Parse meta
         self.header = catalog.meta
@@ -263,195 +301,149 @@ class Pointing:
             self.name = os.path.basename(filename).rsplit('.',1)[0]
 
         if survey_name is not None:
-            self.survey_name = survey_name
-        else:
-            self.survey_name = self.name
+            self.name = survey_name
 
-    def query_NVSS(self):
-        '''
-        Match the pointing to the NVSS catalog
-        '''
-        nvsstable = sc.getnvssdata(ra = [self.center.ra.to_string(u.hourangle, sep=' ')],
-                                   dec = [self.center.dec.to_string(u.deg, sep=' ')],
-                                   offset = 0.5*self.fov.to(u.arcsec))
+    def query_catalog(self, ext_cat_name):
+        """
+        Query external catalog on the internet
 
-        nvsstable['Major'].unit = u.arcsec
-        nvsstable['Minor'].unit = u.arcsec
+        Keyword arguments:
+        ext_cat_name (string) -- Name of or (VO) link to external catalogue
 
-        nvsstable['Major'] = nvsstable['Major'].to(u.deg)
-        nvsstable['Minor'] = nvsstable['Minor'].to(u.deg)
-        nvsstable['PA']  = nvsstable['PA']
+        Returns:
+        ext_cat (Table) -- Table of external catalogue
+        """
 
-        nvsstable['RA']  = nvsstable['RA'].to(u.deg)
-        nvsstable['DEC'] = nvsstable['DEC'].to(u.deg)
-
-        nvsstable['Peak_flux'] /= 1e3 #convert to Jy
-        nvsstable['Total_flux'] /= 1e3 #convert to Jy
-
-        return nvsstable
-
-    def query_FIRST(self):
-        '''
-        Match the pointing to the FIRST catalog
-        '''
-        firsttable = sc.getfirstdata(ra = [self.center.ra.to_string(u.hourangle, sep=' ')],
-                                     dec = [self.center.dec.to_string(u.deg, sep=' ')],
-                                     offset = 0.5*self.fov.to(u.arcsec))
-
-        if not firsttable:
-            sys.exit()
-
-        firsttable['Majax'].unit = u.arcsec
-        firsttable['Minax'].unit = u.arcsec
-
-        firsttable['Majax'] = firsttable['Majax'].to(u.deg)
-        firsttable['Minax'] = firsttable['Minax'].to(u.deg)
-        firsttable['PosAng']  = firsttable['PosAng']
-
-        firsttable['RA']  = firsttable['RA'].to(u.deg)
-        firsttable['DEC'] = firsttable['DEC'].to(u.deg)
-
-        firsttable['Peak flux'] /= 1e3 #convert to Jy
-        firsttable['Int flux'] /= 1e3 #convert to Jy
-
-        return firsttable
-
-    def query_SUMSS(self):
-        '''
-        Match the pointing to the SUMSS catalog. This is very slow since
-        SUMSS does not offer a catalog search so we match to the entire catalog
-        '''
-        if self.center.dec.deg > -29.5:
-            print('Catalog outside of SUMSS footprint')
-            sys.exit()
-
-        sumsstable = sc.getsumssdata(ra = self.center.ra,
-                                     dec = self.center.dec,
+        # Query NVSS
+        if ext_cat_name == 'NVSS':
+            ext_table = sc.getnvssdata(ra = [self.center.ra.to_string(u.hourangle, sep=' ')],
+                                       dec = [self.center.dec.to_string(u.deg, sep=' ')],
+                                       offset = 0.5*self.fov.to(u.arcsec))
+        # Query SUMSS
+        elif ext_cat_name == 'SUMSS':
+            if self.center.dec.deg > -29.5:
+                print('Catalog outside of SUMSS footprint')
+                sys.exit()
+            ext_table = sc.getsumssdata(ra = self.center.ra,
+                                         dec = self.center.dec,
+                                         offset = 0.5*self.fov)
+        # Query FIRST
+        elif ext_cat_name == 'FIRST':
+            ext_table = sc.getfirstdata(ra = [self.center.ra.to_string(u.hourangle, sep=' ')],
+                                        dec = [self.center.dec.to_string(u.deg, sep=' ')],
+                                        offset = 0.5*self.fov.to(u.arcsec))
+        # Query TGSS
+        elif ext_cat_name == 'TGSS':
+            tgss_url = 'https://vo.astron.nl/tgssadr/q/cone/scs.xml'
+            tgsstable = sc.getvodata(tgss_url, 
+                                     central_coord = self.center,
                                      offset = 0.5*self.fov)
+            # Replace object columns because TGSS is horrible
+            for col in tgsstable.colnames:
+                if tgsstable[col].dtype == object:
+                    tgsstable[col] = tgsstable[col].astype('str')
+            ext_table = tgsstable
+        # Query RACS-low
+        elif ext_cat_name == 'RACS-low':
+            ext_table = sc.getracslowdata(central_coord = self.center,
+                                          offset = 0.5*self.uncorrected_fov)
+        # Query RACS-mid
+        elif ext_cat_name == 'RACS-mid':
+            racsmid_url='https://casda.csiro.au/casda_vo_tools/scs/racs_mid_sources_v01'
+            ext_table = sc.getvodata(racsmid_url, 
+                                     central_coord = self.center,
+                                     offset = 0.5*self.fov)
+        # If name is different, try input as VO url
+        else:
+            try:
+                ext_table = sc.getvodata(ext_cat_name, 
+                                         central_coord = self.center,
+                                         offset = 0.5*self.fov)
+            except SomeError:
+                print(f"Nothing found at {ext_cat_name}, make sure you have entered the correct name.")
+                sys.exit()
 
-        sumsstable['Fit_Major_Axis'].unit = u.arcsec
-        sumsstable['Fit_Minor_Axis'].unit = u.arcsec
+        return ext_table
 
-        sumsstable['Fit_Major_Axis'] = sumsstable['Fit_Major_Axis'].to(u.deg)
-        sumsstable['Fit_Minor_Axis'] = sumsstable['Fit_Minor_Axis'].to(u.deg)
-        sumsstable['Fit_Position_Angle']  = sumsstable['Fit_Position_Angle']
-
-        sumsstable['RA']  = sumsstable['RA'].to(u.deg)
-        sumsstable['DEC'] = sumsstable['DEC'].to(u.deg)
-
-        sumsstable['Flux_36_cm']  /= 1e3 #convert to Jy
-        sumsstable['Int_Flux_36_cm'] /= 1e3 #convert to Jy
-
-        return sumsstable
-
-    def query_TGSS(self):
-        '''
-        Match the pointing to the TGSS catalog
-        '''
-        tgsstable = sc.gettgssdata(central_coord = self.center,
-                                   offset = 0.5*self.fov)
-
-        tgsstable['MAJAX']   = tgsstable['MAJAX'].to(u.deg)
-        tgsstable['MINAX']   = tgsstable['MINAX'].to(u.deg)
-        tgsstable['e_MAJAX'] = tgsstable['e_MAJAX'].to(u.deg)
-        tgsstable['e_MINAX'] = tgsstable['e_MINAX'].to(u.deg)
-
-        # Convert to Jy
-        tgsstable['Sint']       /= 1e3
-        tgsstable['Spk']        /= 1e3
-        tgsstable['e_Sint']     /= 1e3
-        tgsstable['e_Spk']      /= 1e3
-        tgsstable['Island_RMS'] /= 1e3
-
-        return tgsstable
-
-    def query_RACSlow(self):
-        '''
-        Match the pointing to the RACS catalog
-        '''
-        racstable = sc.getracslowdata(central_coord = self.center,
-                                      offset = 0.5*self.uncorrected_fov)
-
-        racstable['maj_axis']   = racstable['maj_axis'].to(u.deg)
-        racstable['min_axis']   = racstable['min_axis'].to(u.deg)
-        racstable['e_maj_axis'] = racstable['e_maj_axis'].to(u.deg)
-        racstable['e_min_axis'] = racstable['e_min_axis'].to(u.deg)
-
-        racstable['dc_maj']   = racstable['dc_maj'].to(u.deg)
-        racstable['dc_min']   = racstable['dc_min'].to(u.deg)
-        racstable['e_dc_maj'] = racstable['e_dc_maj'].to(u.deg)
-        racstable['e_dc_min'] = racstable['e_dc_min'].to(u.deg)
-
-        # Convert to Jy
-        racstable['total_flux_source']          /= 1e3
-        racstable['peak_flux']                  /= 1e3
-        racstable['e_total_flux_source_pybdsf'] /= 1e3
-        racstable['e_total_flux_source']        /= 1e3
-        racstable['e_peak_flux']                /= 1e3
-        racstable['noise']                      /= 1e3
-
-        return racstable
-
-    def query_RACSmid(self):
-        '''
-        Match the pointing to the RACS catalog
-        '''
-        racstable = sc.getracsmiddata(central_coord = self.center,
-                                      offset = 0.5*self.uncorrected_fov)
-
-        racstable['maj_axis']   = racstable['maj_axis'].to(u.deg)
-        racstable['min_axis']   = racstable['min_axis'].to(u.deg)
-        racstable['e_maj_axis'] = racstable['e_maj_axis'].to(u.deg)
-        racstable['e_min_axis'] = racstable['e_min_axis'].to(u.deg)
-
-        racstable['dc_maj_axis']   = racstable['dc_maj_axis'].to(u.deg)
-        racstable['dc_min_axis']   = racstable['dc_min_axis'].to(u.deg)
-        racstable['e_dc_maj_axis'] = racstable['e_dc_maj_axis'].to(u.deg)
-        racstable['e_dc_min_axis'] = racstable['e_dc_min_axis'].to(u.deg)
-
-        # Convert to Jy
-        racstable['total_flux']          /= 1e3
-        racstable['e_total_flux_pybdsf'] /= 1e3
-        racstable['e_total_flux']        /= 1e3
-        racstable['peak_flux']           /= 1e3
-        racstable['e_peak_flux']         /= 1e3
-        racstable['e_peak_flux_pybdsf']  /= 1e3
-        racstable['noise']               /= 1e3
-
-        return racstable
-
-def match_catalogs(pointing, ext, sigma_extent, search_dist, overlap_percentage):
-    '''
+def match_catalogs(internal, external, extbig, sigma_extent, search_dist, overlap_percentage):
+    """
     Match the sources of the chosen external catalog to the sources in the pointing
-    '''
-    print(f'Matching {len(ext.sources)} sources in {ext.name} to {len(pointing.cat)} sources in the pointing')
 
+    Keyword arguments:
+    internal (class object) -- Internal catalogue
+    external (class object) -- External catalogue
+    extbig (bool) -- If True, the external catalogue is 
+                     considered to have the biggger beam
+    sigma_extent (float) -- Source extent to match, as factor of sigma
+    search_dist (float)  -- Additional search radius, in degrees
+    header (wcsheader)   -- Image header
+    overlap_percentage (int) -- Minimum percentage overlap between ellipses 
+                                required for two sources to be considered a match
+
+    Returns:
+    matches (list of lists) -- List of matches for each source in catalog with bigger beam
+    """
+    print(f'Matching {len(external.sources)} sources in {external.name} to {len(internal.cat)} sources in input catalog')
+
+    # Determine which catalog has the bigger beam to match properly
+    if extbig:
+        big = external
+        small = internal
+    else:
+        big = internal
+        small = external
+
+    # Get matches for each source in 'big' catalog
     matches = []
-    for source in ext.sources:
-        matches.append(source.match(pointing.cat['RA'], pointing.cat['DEC'],
-                                    pointing.cat['Maj'],pointing.cat['Min'],
-                                    pointing.cat['PA'],
+    for source in big.sources:
+        matches.append(source.match(small.reduced_cat['ra'],
+                                    small.reduced_cat['dec'],
+                                    small.reduced_cat['majax'],
+                                    small.reduced_cat['minax'],
+                                    small.reduced_cat['pa'],
                                     sigma_extent, search_dist,
-                                    helpers.make_header(pointing.header), 
+                                    helpers.make_header(internal.header), 
                                     overlap_percentage))
 
     return matches
 
-def info_match(pointing, ext, matches, fluxtype, alpha, output):
+def info_match(internal, external, matches, extbig, fluxtype, alpha):
     """
     Provide information of the matches
+
+    Keyword arguments:
+    internal (class object) -- Internal catalogue
+    external (class object) -- External catalogue
+    matches (list of lists) -- Matched sources between catalogues
+    extbig (bool) -- If True, the external catalogue is 
+                     considered to have the biggger beam
+    fluxtype (string) -- Flux type to compare, either 'Total' or 'Peak'
+    alpha (float)     -- Spectral index to assum for flux comparison
+
+    Returns:
+    match_info (dict) -- Dictionary of astrometric, flux offsets, and
+                         spectral indices, including summary statistics
     """
+
+    # Determine which catalog has the bigger beam to parse matches properly
+    if extbig:
+        big_sources = external.sources
+        small_sources = internal.sources
+    else:
+        big_sources = internal.sources
+        small_sources = external.sources
+
     match_info = {}
 
+    # Astrometric offsets
     dDEC      = []
     dRA       = []
     n_matches = []
-
     for i, match in enumerate(matches):
         if len(match) > 0:
             for m in match:
                 # Determine the offset
-                dra, ddec = ext.sources[i].skycoord.spherical_offsets_to(pointing.sources[m].skycoord)
+                dra, ddec = big_sources[i].skycoord.spherical_offsets_to(small_sources[m].skycoord)
                 dRA.append(dra.arcsec)
                 dDEC.append(ddec.arcsec)
                 # Determine the matches
@@ -483,40 +475,43 @@ def info_match(pointing, ext, matches, fluxtype, alpha, output):
             for getst in get_stats:
                 match_info['offset']['stats'][mmdat][str(cl)][getst.__name__] = getst((match_info['offset'][mmdat][stats_select]))
 
+    # Flux offsets
     match_info['fluxes'] = {}
 
     ext_flux    = []
     int_flux    = []
     separation  = []
-    n_matches  = []
+    n_matches   = []
     match_alpha = []
-    if fluxtype == 'Total':
-        for i, match in enumerate(matches):
-            if len(match) > 0:
-                ext_flux.append(ext.sources[i].IntFlux)
-                int_flux.append(np.sum([pointing.sources[m].IntFlux for m in match]))
 
-                flux_ratio = ext.sources[i].IntFlux/np.sum([pointing.sources[m].IntFlux for m in match])
-                match_alpha.append(np.log(flux_ratio)/np.log(ext.freq/pointing.freq))
+    for i, match in enumerate(matches):
+        if len(match) > 0:
+            # Determine based on chosen flux type
+            if fluxtype == 'Total':
+                big_flux = big_sources[i].IntFlux
+                small_flux = np.sum([small_sources[m].IntFlux for m in match])
+            elif fluxtype == 'Peak':
+                big_flux = big_sources[i].PeakFlux
+                small_flux = np.sum([small_sources[m].PeakFlux for m in match])
+            else:
+                print(f'Invalid fluxtype {fluxtype}, choose between Total or Peak flux')
+                sys.exit()
 
-                source_coord = SkyCoord(ext.sources[i].RA, ext.sources[i].DEC, unit='deg')
-                separation.append(source_coord.separation(pointing.center).deg)
-                n_matches.append(len(match))
-    elif fluxtype == 'Peak':
-        for i, match in enumerate(matches):
-            if len(match) > 0:
-                ext_flux.append(ext.sources[i].PeakFlux)
-                int_flux.append(np.sum([pointing.sources[m].PeakFlux for m in match]))
+            # Assign fluxes based on bigger beam
+            if extbig:
+                ext_flux.append(big_flux)
+                int_flux.append(small_flux)
+                flux_ratio = big_flux/small_flux
+            else:
+                ext_flux.append(small_flux)
+                int_flux.append(big_flux)
+                flux_ratio = small_flux/big_flux
 
-                flux_ratio = ext.sources[i].PeakFlux/np.sum([pointing.sources[m].PeakFlux for m in match])
-                match_alpha.append(np.log(flux_ratio)/np.log(ext.freq/pointing.freq))
+            match_alpha.append(np.log(flux_ratio)/np.log(external.freq/internal.freq))
 
-                source_coord = SkyCoord(ext.sources[i].RA, ext.sources[i].DEC, unit='deg')
-                separation.append(source_coord.separation(pointing.center).deg)
-                n_matches.append(len(match))
-    else:
-        print(f'Invalid fluxtype {fluxtype}, choose between Total or Peak flux')
-        sys.exit()
+            source_coord = SkyCoord(big_sources[i].RA, big_sources[i].DEC, unit='deg')
+            separation.append(source_coord.separation(internal.center).deg)
+            n_matches.append(len(match))
 
     match_info['fluxes'][fluxtype] = {}
     match_info['fluxes'][fluxtype]['ext_flux']    = ext_flux
@@ -526,7 +521,7 @@ def info_match(pointing, ext, matches, fluxtype, alpha, output):
     match_info['fluxes'][fluxtype]['match_alpha'] = match_alpha
 
     # Scale flux density to proper frequency
-    ext_flux_corrected = np.array(ext_flux) * (pointing.freq/ext.freq)**alpha
+    ext_flux_corrected = np.array(ext_flux) * (internal.freq/external.freq)**alpha
     dFlux = np.array(int_flux)/ext_flux_corrected
 
     match_info['fluxes'][fluxtype]['alpha'] = alpha
@@ -555,44 +550,63 @@ def info_match(pointing, ext, matches, fluxtype, alpha, output):
 
     return match_info
 
-def plot_catalog_match(pointing, ext, matches, plot, dpi):
-    '''
+def plot_catalog_match(internal, external, matches, extbig, plot, dpi):
+    """
     Plot the field with all the matches in it as ellipses
-    '''
+
+    Keyword arguments:
+    internal (class object) -- Internal catalogue
+    external (class object) -- External catalogue
+    matches (list of lists) -- Matched sources between catalogues
+    extbig (bool) -- If True, the external catalogue is 
+                     considered to have the biggger beam
+    plot (bool or string) -- If string, plot will be written here
+    dpi (int) -- DPI of plot
+    """
+
+    # Determine which catalog has the bigger beam
+    if extbig:
+        big_sources = external.sources
+        small_sources = internal.sources
+    else:
+        big_sources = internal.sources
+        small_sources = external.sources
+
     fig = plt.figure(figsize=(20,20))
     ax = plt.subplot()
 
+    # For each big source plot and plot all matches
     for i, match in enumerate(matches):
-        ext_ell = ext.sources[i].to_artist()
-        ax.add_artist(ext_ell)
-        ext_ell.set_facecolor('b')
-        ext_ell.set_alpha(0.5)
+        big_ell = big_sources[i].to_artist()
+        ax.add_artist(big_ell)
+        big_ell.set_facecolor('b')
+        big_ell.set_alpha(0.5)
 
         if len(match) > 0:
             for ind in match:
-                ell = pointing.sources[ind].to_artist()
-                ax.add_artist(ell)
-                ell.set_facecolor('r')
-                ell.set_alpha(0.5)
+                small_ell = small_sources[ind].to_artist()
+                ax.add_artist(small_ell)
+                small_ell.set_facecolor('r')
+                small_ell.set_alpha(0.5)
         else:
-            ext_ell.set_facecolor('k')
+            big_ell.set_facecolor('k')
 
-    non_matches = np.setdiff1d(np.arange(len(pointing.sources)), np.concatenate(matches).ravel())
+    non_matches = np.setdiff1d(np.arange(len(small_sources)), np.concatenate(matches).ravel())
     for i in non_matches:
-        ell = pointing.sources[i].to_artist()
-        ax.add_artist(ell)
-        ell.set_facecolor('g')
-        ell.set_alpha(0.5)
+        small_ell = small_sources[i].to_artist()
+        ax.add_artist(small_ell)
+        small_ell.set_facecolor('g')
+        small_ell.set_alpha(0.5)
 
-    ax.set_xlim(pointing.center.ra.deg-0.5*pointing.fov.value,
-                pointing.center.ra.deg+0.5*pointing.fov.value)
-    ax.set_ylim(pointing.center.dec.deg-0.5*pointing.fov.value*np.cos(pointing.center.dec.rad),
-                pointing.center.dec.deg+0.5*pointing.fov.value*np.cos(pointing.center.dec.rad))
+    ax.set_xlim(internal.center.ra.deg-0.5*internal.fov.value,
+                internal.center.ra.deg+0.5*internal.fov.value)
+    ax.set_ylim(internal.center.dec.deg-0.5*internal.fov.value*np.cos(internal.center.dec.rad),
+                internal.center.dec.deg+0.5*internal.fov.value*np.cos(internal.center.dec.rad))
     ax.set_xlabel('RA (degrees)')
     ax.set_ylabel('DEC (degrees)')
 
     if plot is True:
-        outfile = os.path.join(pointing.dirname,f'match_{ext.name}_{pointing.name}_shapes.png')
+        outfile = os.path.join(internal.dirname,f'match_{external.name}_{internal.name}_shapes.png')
     else:
         outfile = plot
 
@@ -601,10 +615,17 @@ def plot_catalog_match(pointing, ext, matches, plot, dpi):
 
     plt.close()
 
-def plot_astrometrics(match_info, pointing, ext, astro, dpi):
-    '''
+def plot_astrometrics(match_info, internal, external, astro, dpi):
+    """
     Plot astrometric offsets of sources to the reference catalog
-    '''
+
+    Keyword arguments:
+    match_info (dict) -- Match information generated by info_match
+    internal (class object) -- Internal catalogue
+    external (class object) -- External catalogue
+    astro (bool or string)  -- If string, plot will be written here
+    dpi (int) -- DPI of plot
+    """
     cmap = colors.ListedColormap(["navy", "crimson", "limegreen", "gold"])
     norm = colors.BoundaryNorm(np.arange(0.5, 5, 1), cmap.N)
 
@@ -626,20 +647,20 @@ def plot_astrometrics(match_info, pointing, ext, astro, dpi):
     cax.set_title('Matches')
 
     ext_beam_ell = Ellipse(xy=(0,0),
-                           width=ext.BMin,
-                           height=ext.BMaj,
-                           angle=-ext.BPA,
+                           width=external.BMin,
+                           height=external.BMaj,
+                           angle=-external.BPA,
                            facecolor='none',
                            edgecolor='b',
                            linestyle='dashed',
-                           label=f'{ext.name} beam')
+                           label=f'{external.name} beam')
     int_beam_ell = Ellipse(xy=(0,0),
-                           width=pointing.BMin,
-                           height=pointing.BMaj,
-                           angle=-pointing.BPA,
+                           width=internal.BMin,
+                           height=internal.BMaj,
+                           angle=-internal.BPA,
                            facecolor='none',
                            edgecolor='k',
-                           label=f'{pointing.survey_name} beam')
+                           label=f'{internal.name} beam')
 
     ax.add_patch(ext_beam_ell)
     ax.add_patch(int_beam_ell)
@@ -683,7 +704,7 @@ def plot_astrometrics(match_info, pointing, ext, astro, dpi):
     ax.legend(loc='upper right')
 
     if astro is True:
-        outfile = os.path.join(pointing.dirname,f'match_{ext.name}_{pointing.name}_astrometrics.png')
+        outfile = os.path.join(internal.dirname,f'match_{external.name}_{internal.name}_astrometrics.png')
     else:
         outfile = astro
 
@@ -691,10 +712,18 @@ def plot_astrometrics(match_info, pointing, ext, astro, dpi):
     plt.savefig(outfile, dpi=dpi)
     plt.close()
 
-def plot_fluxes(match_info, pointing, ext, fluxtype, flux, dpi):
-    '''
+def plot_fluxes(match_info, internal, external, fluxtype, flux, dpi):
+    """
     Plot flux offsets of sources to the reference catalog
-    '''
+
+    Keyword arguments:
+    match_info (dict) -- Match information generated by info_match
+    internal (class object) -- Internal catalogue
+    external (class object) -- External catalogue
+    fluxtype (string) -- Flux type to compare, either 'Total' or 'Peak'
+    flux (bool or string) -- If string, plot will be written here
+    dpi (int) -- DPI of plot
+    """
     flux_matches = match_info['fluxes'][fluxtype]
 
     cmap = colors.ListedColormap(["navy", "crimson", "limegreen", "gold"])
@@ -728,11 +757,11 @@ def plot_fluxes(match_info, pointing, ext, fluxtype, flux, dpi):
     cax.set_title('Matches')
 
     ax.set_title(f"Flux ratio of {len(flux_matches['dFlux'])} sources")
-    ax.set_xlabel('Distance from pointing center (degrees)')
+    ax.set_xlabel('Distance from image center (degrees)')
     ax.set_ylabel(f'Flux ratio ({fluxtype} flux)')
 
     if flux is True:
-        outfile = os.path.join(pointing.dirname,f'match_{ext.name}_{pointing.name}_fluxes.png')
+        outfile = os.path.join(internal.dirname,f'match_{external.name}_{internal.name}_fluxes.png')
     else:
         outfile = flux
 
@@ -740,36 +769,62 @@ def plot_fluxes(match_info, pointing, ext, fluxtype, flux, dpi):
     plt.savefig(outfile, dpi=dpi)
     plt.close()
 
-def write_to_catalog(pointing, ext, matches, match_info, fluxtype, output):
-    '''
+def write_to_catalog(internal, external, matches, extbig, match_info, fluxtype, output):
+    """
     Write the matched catalogs to a fits file
-    '''
-    ext.cat['Match_alpha'] = 0.0
-    ext.cat['idx'] = np.arange(len(ext.cat))
-    pointing.cat['idx'] = np.inf
+
+    Keyword arguments:
+    internal (class object) -- Internal catalogue
+    external (class object) -- External catalogue
+    matches (list of lists) -- Matched sources between catalogues
+    extbig (bool) -- If True, the external catalogue is 
+                     considered to have the biggger beam
+    match_info (dict) -- Match information generated by info_match
+    fluxtype (string) -- Flux type to compare, either 'Total' or 'Peak'
+    output (bool or string) -- If string, plot will be written here
+    """
+
+    # Bigger beam has matches
+    if extbig:
+        big = external
+        small = internal
+    else:
+        big = internal
+        small = external
+
+    big.cat['Match_alpha'] = 0.0
+    big.cat['idx'] = np.arange(len(big.cat))
+    small.cat['idx'] = np.inf
 
     match_alpha_iter = iter(match_info['fluxes'][fluxtype]['match_alpha'])
     for i, match in enumerate(matches):
         if len(match) > 0:
-            ext.cat[i]['Match_alpha'] = next(match_alpha_iter)
+            big.cat[i]['Match_alpha'] = next(match_alpha_iter)
             for j in match:
-                pointing.cat[j]['idx'] = i
+                small.cat[j]['idx'] = i
 
-    out = join(ext.cat, pointing.cat, keys='idx', table_names=[ext.name,pointing.survey_name])
+    out = join(big.cat, small.cat, keys='idx', 
+               table_names=[big.name,small.name])
 
     if output is True:
-        outfile = os.path.join(pointing.dirname, f'match_{ext.name}_{pointing.name}.fits')
+        outfile = os.path.join(internal.dirname, f'match_{external.name}_{internal.name}.fits')
     else:
         outfile = output
 
     print(f"--> Saving output FITS catalog '{outfile}'")
     out.write(outfile, overwrite=True, format='fits')
 
-def write_info(pointing, ext, match_info, output):
+def write_info(internal, external, match_info, output):
     """
     Write the information into a json file
+
+    Keyword arguments:
+    internal (class object) -- Internal catalogue
+    external (class object) -- External catalogue
+    match_info (dict) -- Match information generated by info_match
+    output (bool or string) -- If string, plot will be written here
     """
-    filename = os.path.join(pointing.dirname, f'match_{ext.name}_{pointing.name}_info.json')
+    filename = os.path.join(internal.dirname, f'match_{external.name}_{internal.name}_info.json')
 
     # Write JSON file
     print(f"--> Saving info json file '{filename}'")
@@ -785,7 +840,7 @@ def main():
     parser = new_argument_parser()
     args = parser.parse_args()
 
-    pointing = args.pointing
+    input_cat_file = args.input_cat
     ext_cat = args.ext_cat
     fluxtype = args.fluxtype
     dpi = args.dpi
@@ -806,43 +861,29 @@ def main():
     search_dist    = args.search_dist/3600 # to degrees
     source_overlap = args.source_overlap_percent
 
-    pointing_cat = Table.read(pointing)
-    pointing = Pointing(pointing_cat, pointing, survey_name, ra_center, dec_center, fov)
+    input_cat = Table.read(input_cat_file)
+    int_catalog = BDSFCatalog(input_cat, input_cat_file, survey_name, ra_center, dec_center, fov)
 
-    if ext_cat == 'NVSS':
-        ext_table = pointing.query_NVSS()
-        ext_catalog = ExternalCatalog(ext_cat, ext_table, pointing.center)
-    elif ext_cat == 'SUMSS':
-        ext_table = pointing.query_SUMSS()
-        ext_catalog = ExternalCatalog(ext_cat, ext_table, pointing.center)
-    elif ext_cat == 'FIRST':
-        ext_table = pointing.query_FIRST()
-        ext_catalog = ExternalCatalog(ext_cat, ext_table, pointing.center)
-    elif ext_cat == 'TGSS':
-        ext_table = pointing.query_TGSS()
-        ext_catalog = ExternalCatalog(ext_cat, ext_table, pointing.center)
-    elif ext_cat == 'RACS-low':
-        ext_table = pointing.query_RACSlow()
-        ext_catalog = ExternalCatalog(ext_cat, ext_table, pointing.center)
-    elif ext_cat == 'RACS-mid':
-        ext_table = pointing.query_RACSmid()
-        ext_catalog = ExternalCatalog(ext_cat, ext_table, pointing.center)
-    elif os.path.exists(ext_cat):
-        ext_table = Table.read(ext_cat)
+    if os.path.exists(ext_cat):
         if 'bdsfcat' in ext_cat:
-            ext_catalog = Pointing(ext_table, ext_cat, ra_center=ra_center, dec_center=dec_center, fov=fov)
+            ext_catalog = BDSFCatalog(ext_table, ext_cat, ra_center=ra_center, dec_center=dec_center, fov=fov)
         else:
-            ext_catalog = ExternalCatalog(ext_cat, ext_table, pointing.center)
+            ext_catalog = ExternalCatalog(ext_cat, ext_table, int_catalog.center)
     else:
-        print('Invalid input table!')
-        exit()
+        ext_table = int_catalog.query_catalog(ext_cat)
+        ext_catalog = ExternalCatalog(ext_cat, ext_table, int_catalog.center)
 
     if len(ext_table) == 0:
         print('No sources were found to match, most likely the external catalog has no coverage here')
         exit()
 
-    matches      = match_catalogs(pointing, ext_catalog, sigma_extent, search_dist, source_overlap)
-    matches_info = info_match(pointing, ext_catalog, matches, fluxtype, alpha, output)
+    # Before matching, determine which catalogue has larger resolution (so is probably smaller)
+    extbig = True
+    if int_catalog.BMaj > ext_catalog.BMaj:
+        extbig = False
+
+    matches = match_catalogs(int_catalog, ext_catalog, extbig, sigma_extent, search_dist, source_overlap)
+    matches_info = info_match(int_catalog, ext_catalog, matches, extbig, fluxtype, alpha)
 
     matches_info['INPUT'] = {}
     matches_info['INPUT']['alpha'] = alpha 
@@ -851,33 +892,35 @@ def main():
     matches_info['INPUT']['source_overlap_percent'] = source_overlap
 
     if plot:
-        plot_catalog_match(pointing, ext_catalog, matches, plot, dpi)
+        plot_catalog_match(int_catalog, ext_catalog, matches, extbig, plot, dpi)
     if astro:
-        plot_astrometrics(matches_info, pointing, ext_catalog, astro, dpi)
+        plot_astrometrics(matches_info, int_catalog, ext_catalog, astro, dpi)
     if flux:
-        plot_fluxes(matches_info, pointing, ext_catalog, fluxtype, flux, dpi)
+        plot_fluxes(matches_info, int_catalog, ext_catalog, fluxtype, flux, dpi)
     if output:
-        write_to_catalog(pointing, ext_catalog, matches, matches_info, fluxtype, output)
-        write_info(pointing, ext_catalog, matches_info, output)
+        write_to_catalog(int_catalog, ext_catalog, matches, extbig, matches_info, fluxtype, output)
+        write_info(int_catalog, ext_catalog, matches_info, output)
 
     if annotate == 'kvis':
-        kvis.matches_to_kvis(pointing, ext_catalog, matches, annotate, annotate_nonmatched, sigma_extent)
+        kvis.matches_to_kvis(int_catalog, ext_catalog, matches, extbig, annotate, annotate_nonmatched, sigma_extent)
     if annotate == 'ds9':
-        kvis.matches_to_ds9(pointing, ext_catalog, matches, annotate, annotate_nonmatched, sigma_extent)
+        kvis.matches_to_ds9(int_catalog, ext_catalog, matches, extbig, annotate, annotate_nonmatched, sigma_extent)
 
 def new_argument_parser():
 
     parser = ArgumentParser()
 
-    parser.add_argument("pointing", type=str,
-                        help="""Pointing catalog made by PyBDSF.""")
+    parser.add_argument("input_cat", type=str,
+                        help="""Catalog made by PyBDSF.""")
     parser.add_argument("ext_cat", default="NVSS", type=str,
-                        help="""External catalog to match to, choice between
-                                NVSS, SUMMS, FIRST, TGSS, RACS or a file. If the external
-                                catalog is a PyBDSF catalog, make sure the filename
-                                has 'bdsfcat' in it. If a different catalog, the
-                                parsets/extcat.json file must be used to specify its
-                                details (default NVSS).""")
+                        help="""External catalog to match to. Standard catalogues are
+                                NVSS, SUMMS, FIRST, TGSS, RACS-low or RACS-mid (default NVSS).
+                                Any other name will be interpreted as a file, or failing
+                                that a VO link. If a non-standard catalog is specified,
+                                the parsets/extcat.json file must be used to specify its
+                                details. Alternatively, if the external catalog is a 
+                                PyBDSF catalog, it will be parsed as such if the filename 
+                                contains the substring 'bdsfcat'.""")
     parser.add_argument("--match_sigma_extent", default=3, type=float,
                         help="""The matching extent used for sources, defined in sigma.
                                 Any sources within this extent will be considered matches.
