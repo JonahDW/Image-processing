@@ -865,6 +865,7 @@ def main():
     int_catalog = BDSFCatalog(input_cat, input_cat_file, survey_name, ra_center, dec_center, fov)
 
     if os.path.exists(ext_cat):
+        ext_table = Table.read(ext_cat)
         if 'bdsfcat' in ext_cat:
             ext_catalog = BDSFCatalog(ext_table, ext_cat, ra_center=ra_center, dec_center=dec_center, fov=fov)
         else:
