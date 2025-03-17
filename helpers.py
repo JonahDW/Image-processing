@@ -191,6 +191,8 @@ def ellipse_skyprojection(ra, dec, Bmaj, Bmin, PA, header=None):
         Ellipse_Sky_deg           = WCS.utils.pixel_to_skycoord(Ellipse_tangent_plane_pix[:,0],
                                                                 Ellipse_tangent_plane_pix[:,1],
                                                                 wcs)
+        # Ensure proper coordinate system
+        Ellipse_Sky_deg           = Ellipse_Sky_deg.transform_to('icrs')
         Ellipse_Sky_deg_reshaped  = np.column_stack((Ellipse_Sky_deg.ra.deg,
                                                      Ellipse_Sky_deg.dec.deg))
         Ellipse_SKY               = Ellipse_Sky_deg_reshaped 

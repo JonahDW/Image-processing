@@ -194,7 +194,7 @@ class SourceEllipse:
 class ExternalCatalog:
 
     def __init__(self, name, catalog, center):
-        self.name = name
+        self.name = Path(name).stem
         self.cat = catalog
 
         # Get properties
@@ -205,12 +205,11 @@ class ExternalCatalog:
         self.freq  = freq
 
         # If quality flag is present, exclude flagged sources
-        if 'quality_flag' in column_dict:
-            if columns['quality_flag']:
-                self.cat = self.cat[self.cat[columns['quality_flag']] == 1]
-                n_rejected = len(self.cat[self.cat[columns['quality_flag']] == 1])
-                if  n_rejected > 0:
-                    print(f'Excluding {n_rejected} sources that have a negative quality flag')
+        if column_dict['quality_flag']:
+            self.cat = self.cat[self.cat[column_dict['quality_flag']] == 1]
+            n_rejected = len(self.cat[self.cat[column_dict['quality_flag']] == 0])
+            if  n_rejected > 0:
+                print(f'Excluding {n_rejected} sources that have a negative quality flag')
 
         # Create catalog for creating source ellipses
         self.reduced_cat = Table()
