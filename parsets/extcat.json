@@ -7,12 +7,22 @@
         "pa" : "PA",
         "peak_flux" : "Peak_flux",
         "total_flux" : "Total_flux",
-		"quality_flag" : null
+        "quality_flag" : null
     },
+	"units" : {
+		"ra" : "deg",
+		"dec" : "deg",
+		"majax" : "arcsec",
+		"minax" : "arcsec",
+		"pa" : "deg",
+		"peak_flux" : "mJy/beam",
+		"total_flux" : "mJy"
+ 	},
     "properties" : {
         "_comment" : "BMAJ and BMIN in arcsec, BPA in degrees, freq in MHz",
         "BMAJ" : 45.0,
         "BMIN" : 45.0,
         "BPA" : 90.0,
         "freq" : 1400.0
+    }
 }

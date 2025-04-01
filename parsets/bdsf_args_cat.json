@@ -12,9 +12,9 @@
 		"atrous_jmax" : 3
     },
     "export_image" : {
-        "ch0" : true,
+        "ch0" : false,
         "rms" : true,
-        "mean" : true,
+        "mean" : false,
         "pi" : false,
         "gaus_resid" : true,
         "shap_resid" : false,

@@ -138,7 +138,7 @@ def write_annotation(outputfilename,source_ra,source_dec,**kwargs):
 
     return(outputfilename)
 
-def matches_to_kvis(pointing, ext, matches, annotate, annotate_nonmatchedcat, sigma_extent):
+def matches_to_kvis(internal, external, matches, extbig, annotate, annotate_nonmatchedcat, sigma_extent):
     '''
     Write the results to a kvis annotation file
 
@@ -149,38 +149,46 @@ def matches_to_kvis(pointing, ext, matches, annotate, annotate_nonmatchedcat, si
     FWHM_to_sigma_extent  = sigma_extent / (2*np.sqrt(2*np.log(2)))
     FWHMtosemimajmin      = 0.5 * FWHM_to_sigma_extent
 
+    # Which catalog has bigger beam
+    if extbig:
+        big_sources = external.sources
+        small_sources = internal.sources
+    else:
+        big_sources = internal.sources
+        small_sources = external.sources
+
     match_ext_lines = []
     match_int_lines = []
     non_match_ext_lines = []
     for i, match in enumerate(matches):
         if len(match) > 0:
-            source = ext.sources[i]
+            source = big_sources[i]
             toprt = f'ELLIPSE {source.RA:.6f} {source.DEC:.6f} {source.Maj*FWHMtosemimajmin:.6f} {source.Min*FWHMtosemimajmin:.6f} {source.PA:.4f} \n'
             match_ext_lines.append(toprt)
             for ind in match:
-                source = pointing.sources[ind]
+                source = small_sources[ind]
                 toprt = f'ELLIPSE {source.RA:.6f} {source.DEC:.6f} {source.Maj*FWHMtosemimajmin:.6f} {source.Min*FWHMtosemimajmin:.6f} {source.PA:.4f} \n'
                 match_int_lines.append(toprt)
         else:
-            source = ext.sources[i]
+            source = big_sources[i]
             toprt = f'ELLIPSE {source.RA:.6f} {source.DEC:.6f} {source.Maj*FWHMtosemimajmin:.6f} {source.Min*FWHMtosemimajmin:.6f} {source.PA:.4f} \n'
             non_match_ext_lines.append(toprt)
 
-    non_matches = np.setdiff1d(np.arange(len(pointing.sources)), np.concatenate(matches).ravel())
+    non_matches = np.setdiff1d(np.arange(len(small_sources)), np.concatenate(matches).ravel())
     non_match_int_lines = []
     for i in non_matches:
-        source = pointing.sources[i]
+        source = small_sources[i]
         toprt = f'ELLIPSE {source.RA:.6f} {source.DEC:.6f} {source.Maj*FWHMtosemimajmin:.6f} {source.Min*FWHMtosemimajmin:.6f} {source.PA:.4f} \n'
         non_match_int_lines.append(toprt)
 
-    outputfilename = os.path.join(pointing.dirname,f'match_{ext.name}_{pointing.name}.ann')
+    outputfilename = os.path.join(internal.dirname,f'match_{external.name}_{internal.name}.ann')
     print(f"--> Writing kvis annotation file '{outputfilename}'")
 
     kvisfile = open(outputfilename,'w')
     kvisfile.writelines('# Annotation file used for KVIS\n')
     kvisfile.writelines('# \n')
 
-    kvisfile.writelines('# Catalogues: '+ext.name+' and '+pointing.name+' \n')
+    kvisfile.writelines('# Catalogues: '+external.name+' and '+internal.name+' \n')
     kvisfile.writelines('# \n')
 
     kvisfile.writelines('COORD W\n')
@@ -215,7 +223,7 @@ def matches_to_kvis(pointing, ext, matches, annotate, annotate_nonmatchedcat, si
 
     kvisfile.close()
 
-def matches_to_ds9(pointing, ext, matches, annotate, annotate_nonmatchedcat, sigma_extent):
+def matches_to_ds9(internal, external, matches, extbig, annotate, annotate_nonmatchedcat, sigma_extent):
     '''
     Write the results to a kvis annotation file
 
@@ -226,38 +234,46 @@ def matches_to_ds9(pointing, ext, matches, annotate, annotate_nonmatchedcat, sig
     FWHM_to_sigma_extent  = sigma_extent / (2*np.sqrt(2*np.log(2)))
     FWHMtosemimajmin      = 0.5 * FWHM_to_sigma_extent
 
+    # Which catalog has bigger beam
+    if extbig:
+        big_sources = external.sources
+        small_sources = internal.sources
+    else:
+        big_sources = internal.sources
+        small_sources = external.sources
+
     match_ext_lines = []
     match_int_lines = []
     non_match_ext_lines = []
     for i, match in enumerate(matches):
         if len(match) > 0:
-            source = ext.sources[i]
+            source = big_sources[i]
             toprt = f'ellipse {source.RA:.6f} {source.DEC:.6f} {source.Min*FWHMtosemimajmin:.6f} {source.Maj*FWHMtosemimajmin:.6f} {source.PA:.4f} \n'
             match_ext_lines.append(toprt)
             for ind in match:
-                source = pointing.sources[ind]
+                source = small_sources[ind]
                 toprt = f'ellipse {source.RA:.6f} {source.DEC:.6f} {source.Min*FWHMtosemimajmin:.6f} {source.Maj*FWHMtosemimajmin:.6f} {source.PA:.4f} \n'
                 match_int_lines.append(toprt)
         else:
-            source = ext.sources[i]
+            source = big_sources[i]
             toprt = f'ellipse {source.RA:.6f} {source.DEC:.6f} {source.Min*FWHMtosemimajmin:.6f} {source.Maj*FWHMtosemimajmin:.6f} {source.PA:.4f} \n'
             non_match_ext_lines.append(toprt)
 
-    non_matches = np.setdiff1d(np.arange(len(pointing.sources)), np.concatenate(matches).ravel())
+    non_matches = np.setdiff1d(np.arange(len(small_sources)), np.concatenate(matches).ravel())
     non_match_int_lines = []
     for i in non_matches:
-        source = pointing.sources[i]
+        source = small_sources[i]
         toprt = f'ellipse {source.RA:.6f} {source.DEC:.6f} {source.Min*FWHMtosemimajmin:.6f} {source.Maj*FWHMtosemimajmin:.6f} {source.PA:.4f} \n'
         non_match_int_lines.append(toprt)
 
-    outputfilename = os.path.join(pointing.dirname,f'match_{ext.name}_{pointing.name}.reg')
+    outputfilename = os.path.join(internal.dirname,f'match_{external.name}_{internal.name}.reg')
     print(f"--> Writing ds9 region file '{outputfilename}'")
 
     regfile = open(outputfilename,'w')
     regfile.writelines('# Region file format: DS9 CARTA 1.4\n')
     regfile.writelines('# \n')
 
-    regfile.writelines('# Catalogues: '+ext.name+' and '+pointing.name+' \n')
+    regfile.writelines('# Catalogues: '+external.name+' and '+internal.name+' \n')
     regfile.writelines('# \n')
 
     regfile.writelines("global font='helvetica 10 normal roman' wcs=wcs\n")
