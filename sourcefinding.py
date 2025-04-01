@@ -7,7 +7,7 @@ import ast
 
 import numpy as np
 import matplotlib
-matplotlib.use('Agg')
+#matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 from argparse import ArgumentParser
@@ -25,7 +25,7 @@ from regions import EllipseSkyRegion, Regions
 import bdsf
 import helpers
 
-def run_bdsf(image, output_dir, argfile, output_format):
+def run_bdsf(image, output_dir, argfile, output_format, reuse_rmsmean=False):
     '''
     Run PyBDSF on an image
 
@@ -34,7 +34,8 @@ def run_bdsf(image, output_dir, argfile, output_format):
     argfile -- Input json file containing arguments
                for bdsf functions
     '''
-    imname = os.path.join(output_dir,os.path.basename(image).rsplit('.',1)[0])
+    imname = os.path.basename(image).rsplit('.',1)[0]
+    impath = os.path.join(output_dir,imname)
 
     path = Path(__file__).parent / argfile
     with open(path) as f:
@@ -48,11 +49,16 @@ def run_bdsf(image, output_dir, argfile, output_format):
         if args_dict['process_image']['rms_box_bright'] is not None:
             args_dict['process_image']['rms_box_bright'] = ast.literal_eval(args_dict['process_image']['rms_box_bright'])
 
-    img = bdsf.process_image(image, **args_dict['process_image'])
+    if reuse_rmsmean:
+        img = bdsf.process_image(image, **args_dict['process_image'],
+                                 rmsmean_map_filename=[imname+'_mean.fits',
+                                                       imname+'_rms.fits'])
+    else:
+        img = bdsf.process_image(image, **args_dict['process_image'])
 
     for img_type in args_dict['export_image']:
         if args_dict['export_image'][img_type]:
-            img.export_image(outfile=imname+'_'+img_type+'.fits', clobber=True, img_type=img_type)
+            img.export_image(outfile=impath+'_'+img_type+'.fits', clobber=True, img_type=img_type)
 
     outcat = None
     for of in output_format:
@@ -64,25 +70,25 @@ def run_bdsf(image, output_dir, argfile, output_format):
             fmt, cat_type = fmt
 
         if fmt == 'ds9':
-            outcatalog = imname+'_'+cat_type+'_bdsfcat.ds9.reg'
+            outcatalog = impath+'_'+cat_type+'_bdsfcat.ds9.reg'
             img.write_catalog(outfile=outcatalog,
                               format=fmt,
                               catalog_type=cat_type,
                               clobber=True)
         elif fmt == 'kvis':
-            outcatalog = imname+'_bdsfcat.kvis.ann'
+            outcatalog = impath+'_bdsfcat.kvis.ann'
             img.write_catalog(outfile=outcatalog,
                               format=fmt,
                               catalog_type='gaul',
                               clobber=True)
         elif fmt == 'star':
-            outcatalog = imname+'_bdsfcat.star'
+            outcatalog = impath+'_bdsfcat.star'
             img.write_catalog(outfile=outcatalog,
                               format=fmt,
                               catalog_type='gaul',
                               clobber=True)
         else:
-            outcatalog = imname+'_'+cat_type+'_bdsfcat.'+fmt
+            outcatalog = impath+'_'+cat_type+'_bdsfcat.'+fmt
             img.write_catalog(outfile=outcatalog,
                               format=fmt,
                               catalog_type=cat_type,
@@ -284,17 +290,31 @@ def plot_sf_results(image_file, imname, regions, max_sep, plot, plot_isl, thresh
     Plot the results of the sourcefinding
     '''
     image = helpers.open_fits_casa(image_file)
+    img = np.squeeze(image[0].data)
+    vmax = np.percentile(img, 95)
+
     if rms_image is None:
         rms_image = imname+'_rms.fits'
-    rms = helpers.open_fits_casa(rms_image)
+    mean_image = imname+'_mean.fits'
 
-    img = image[0].data[0,0,:,:]
-    rms_img = rms[0].data[0,0,:,:]
+    # If mean image exists, subtract
+    if os.path.exists(mean_image):
+        mean = helpers.open_fits_casa(mean_image)
+        mean_img = np.squeeze(mean[0].data)
+        img -= mean_image
+
+    # If rms image exists, divide and set max to 5
+    if os.path.exists(rms_image):
+        rms = helpers.open_fits_casa(rms_image)
+        rms_img = np.squeeze(rms[0].data)
+        img /= rms_img
+        vmax = 5
+
     wcs = WCS(image[0].header, naxis=2)
 
     fig = plt.figure(figsize=(20,20))
     ax = plt.subplot(projection=wcs)
-    ax.imshow(img/rms_img, origin='lower', cmap='bone', vmin=0, vmax=5)
+    ax.imshow(img, origin='lower', cmap='bone', vmin=0, vmax=vmax)
     ax.set_xlabel('RA')
     ax.set_ylabel('DEC')
 
@@ -303,7 +323,7 @@ def plot_sf_results(image_file, imname, regions, max_sep, plot, plot_isl, thresh
         ax.add_patch(patch)
 
     if plot_isl:
-        ax.contour(img/rms_img, origin='lower', colors='royalblue', levels=[thresh_isl], linewidths=0.25)
+        ax.contour(img, origin='lower', colors='royalblue', levels=[thresh_isl], linewidths=0.25)
 
     if flag_regions is not None:
         for region in flag_regions:
@@ -330,23 +350,39 @@ def main():
 
     inpimage = args.image
     mode = args.mode
-    size = args.size
-    plot = args.plot
-    plot_isl = args.plot_isl
+
+    # Output options
     outdir = args.outdir
     output_format = args.output_format
+
+    # Additional input options
+    rms_image = args.rms_image
     spectral_index = args.spectral_index
+    reuse_rmsmean = args.reuse_rmsmean
+    redo_catalog = args.redo_catalog
+    parfile = args.parfile
+
+    # Catalog and mask options
     max_separation = args.max_separation
     flag_artefacts = args.flag_artefacts
-    rms_image = args.rms_image
+    size = args.size
     survey = args.survey
     pointing = args.pointing
-    redo_catalog = args.redo_catalog
+
+    # Plotting options
+    plot = args.plot
+    plot_isl = args.plot_isl
 
     if mode.lower() in 'cataloging':
-        bdsf_args = 'parsets/bdsf_args_cat.json'
+        if parfile is None:
+            bdsf_args = 'parsets/bdsf_args_cat.json'
+        else:
+            bdsf_args = f'parsets/{parfile}.json'
     elif mode.lower() in 'masking':
-        bdsf_args = 'parsets/bdsf_args_mask.json'
+        if parfile is None:
+            bdsf_args = 'parsets/bdsf_args_mask.json'
+        else:
+            bdsf_args = f'parsets/{parfile}.json'
     else:
         print(f'Invalid mode {mode}, please choose between c(ataloging) or m(asking)')
         sys.exit()
@@ -367,7 +403,10 @@ def main():
         print(f'Using previously generated catalog and skipping sourcefinding')
         outcat, img = fake_run_bdsf(inpimage, redo_catalog)
     else:
-        outcat, img = run_bdsf(inpimage, output_dir, argfile=bdsf_args, output_format=output_format)
+        outcat, img = run_bdsf(inpimage, output_dir,
+                               argfile=bdsf_args,
+                               output_format=output_format,
+                               reuse_rmsmean=reuse_rmsmean)
 
     if not outcat:
         print('No FITS catalog generated, no further operations are performed')
@@ -463,6 +502,10 @@ def new_argument_parser():
     parser.add_argument("--rms_image", default=None, 
                         help="""Specify RMS alternative image to use for plotting 
                                 (default = use RMS image from sourcefinding)""")
+    parser.add_argument("--reuse_rmsmean", action='store_true',
+                        help="""Use already present rms and mean images.""")
+    parser.add_argument("--parfile", default=None, type=str,
+                        help="""Alternative PyBDSF parameter file, without .json extension.""")
     parser.add_argument("--survey", default=None, help="Name of the survey to be used in source ids.")
     parser.add_argument("--pointing", default=None, type=str,
                         help="""Name of the pointing to be used in the pointing id. 

@@ -37,51 +37,36 @@ usage: sourcefinding.py [-h] [-o OUTPUT_FORMAT [OUTPUT_FORMAT ...]]
                         mode image
 
 positional arguments:
-  mode                  Purpose of the sourcefinding, choose between
-                        cataloging (c) or masking (m). This choice will
-                        determine the parameter file that PyBDSF will use, as
-                        well as the output files.
+  mode                  Purpose of the sourcefinding, choose between cataloging (c) or masking (m). This choice will determine the parameter file that
+                        PyBDSF will use, as well as the output files.
   image                 Name of the image to perform sourcefinding on.
 
 optional arguments:
   -h, --help            show this help message and exit
   -o OUTPUT_FORMAT [OUTPUT_FORMAT ...], --output_format OUTPUT_FORMAT [OUTPUT_FORMAT ...]
-                        Output format of the catalog, supported formats are:
-                        ds9, fits, star, kvis, ascii, csv. In case of fits,
-                        ascii, ds9, and csv, additionally choose output
-                        catalog as either source list (srl) or gaussian list
-                        (gaul), default srl. Currently, only fits and csv
-                        formats source list can be used for further
-                        processing. Input can be multiple entries, e.g. -o
-                        fits:srl ds9 (default = fits:srl).
-  --outdir OUTDIR       Name of directory to place output, default is the
-                        image directory.
-  --size SIZE           If masking, multiply the size of the masks by this
-                        amount (default = 1.0).
-  --plot [PLOT]         Plot the results of the sourcefinding as a png of the
-                        image with sources overlaid, optionally provide an
-                        output filename (default = do not plot the results).
+                        Output format of the catalog, supported formats are: ds9, fits, star, kvis, ascii, csv. In case of fits, ascii, ds9, and csv,
+                        additionally choose output catalog as either source list (srl) or gaussian list (gaul), default srl. Currently, only fits and csv
+                        formats source list can be used for further processing. Input can be multiple entries, e.g. -o fits:srl ds9 (default = fits:srl).
+  --outdir OUTDIR       Name of directory to place output, default is the image directory.
+  --size SIZE           If masking, multiply the size of the masks by this amount (default = 1.0).
+  --plot [PLOT]         Plot the results of the sourcefinding as a png of the image with sources overlaid, optionally provide an output filename (default
+                        = do not plot the results).
   --plot_isl            Plot island boundaries along with source ellipses.
   --spectral_index [SPECTRAL_INDEX]
-                        Measure the spectral indices of the sources using a
-                        specified spectral index image. Can be FITS or CASA
-                        format. (default = do not measure spectral indices).
+                        Measure the spectral indices of the sources using a specified spectral index image. Can be FITS or CASA format. (default = do not
+                        measure spectral indices).
   --max_separation MAX_SEPARATION
-                        Only include sources in the final catalogue within a
-                        specified distance (in degrees) from the image centre.
-                        (default = include all)
-  --flag_artefacts      Add column for flagging artefacts around bright
-                        sources (default = do not flag)
+                        Only include sources in the final catalogue within a specified distance (in degrees) from the image centre. (default = include
+                        all)
+  --flag_artefacts      Add column for flagging artefacts around bright sources (default = do not flag)
   --rms_image RMS_IMAGE
-                        Specify RMS alternative image to use for plotting
-                        (default = use RMS image from sourcefinding)
+                        Specify RMS alternative image to use for plotting (default = use RMS image from sourcefinding)
+  --reuse_rmsmean       Use already present rms and mean images.
+  --parfile PARFILE     Alternative PyBDSF parameter file, without .json extension.
   --survey SURVEY       Name of the survey to be used in source ids.
-  --pointing POINTING   Name of the pointing to be used in the pointing id. If
-                        not specified this is taken from the 'OBJECT' header
-                        flag.
+  --pointing POINTING   Name of the pointing to be used in the pointing id. If not specified this is taken from the 'OBJECT' header flag.
   --redo_catalog REDO_CATALOG
-                        Specify catalog file if you want some part of the
-                        process to be redone, but want to skip sourcefinding
+                        Specify catalog file if you want some part of the process to be redone, but want to skip sourcefinding
 ```
 
 ## catalog_matching.py
