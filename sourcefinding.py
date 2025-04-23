@@ -25,7 +25,7 @@ from regions import EllipseSkyRegion, Regions
 import bdsf
 import helpers
 
-def run_bdsf(image, output_dir, argfile, output_format, reuse_rmsmean=False):
+def run_bdsf(image, output_dir, argfile, output_format, reuse_rmsmean=False, force_finding=None):
     '''
     Run PyBDSF on an image
 
@@ -49,16 +49,29 @@ def run_bdsf(image, output_dir, argfile, output_format, reuse_rmsmean=False):
         if args_dict['process_image']['rms_box_bright'] is not None:
             args_dict['process_image']['rms_box_bright'] = ast.literal_eval(args_dict['process_image']['rms_box_bright'])
 
-    if reuse_rmsmean:
+    incl_empty = False
+    if force_finding:
+        force_finding = force_finding[force_finding['Sep_PC'] < 0.85]
+        src_ra_dec = list(zip(force_finding['RA'], force_finding['DEC']))
+        img = bdsf.process_image(image, **args_dict['process_image'],
+                                 src_ra_dec=src_ra_dec,
+                                 aperture=15)
+        # For the catalog writing
+        incl_empty = True
+
+    elif reuse_rmsmean:
         img = bdsf.process_image(image, **args_dict['process_image'],
                                  rmsmean_map_filename=[imname+'_mean.fits',
                                                        imname+'_rms.fits'])
     else:
         img = bdsf.process_image(image, **args_dict['process_image'])
 
+    img.show_fit(ch0_flagged=True)
+
     for img_type in args_dict['export_image']:
         if args_dict['export_image'][img_type]:
-            img.export_image(outfile=impath+'_'+img_type+'.fits', clobber=True, img_type=img_type)
+            img.export_image(outfile=impath+'_'+img_type+'.fits', 
+                             clobber=True, img_type=img_type)
 
     outcat = None
     for of in output_format:
@@ -92,6 +105,7 @@ def run_bdsf(image, output_dir, argfile, output_format, reuse_rmsmean=False):
             img.write_catalog(outfile=outcatalog,
                               format=fmt,
                               catalog_type=cat_type,
+                              incl_empty=incl_empty,
                               clobber=True)
             if fmt == 'fits' and cat_type == 'srl':
                 outcat = outcatalog
@@ -360,6 +374,7 @@ def main():
     spectral_index = args.spectral_index
     reuse_rmsmean = args.reuse_rmsmean
     redo_catalog = args.redo_catalog
+    force_finding = args.force_finding
     parfile = args.parfile
 
     # Catalog and mask options
@@ -391,13 +406,16 @@ def main():
         output_dir = os.path.join(os.path.dirname(inpimage),
                                   os.path.basename(inpimage).rsplit('.',1)[0]+'_pybdsf')
     else:
-        output_dir = os.path.join(outdir, os.path.basename(inpimage).rsplit('.',1)[0]+'_pybdsf')
+        output_dir = outdir
     imname = os.path.join(output_dir, os.path.basename(inpimage).rsplit('.',1)[0])
     if not os.path.exists(output_dir):
         os.mkdir(output_dir)
 
     if output_format is None:
         output_format = ['fits:srl']
+
+    if force_finding:
+        force_finding = helpers.open_catalog(force_finding)
 
     if redo_catalog:
         print(f'Using previously generated catalog and skipping sourcefinding')
@@ -406,18 +424,14 @@ def main():
         outcat, img = run_bdsf(inpimage, output_dir,
                                argfile=bdsf_args,
                                output_format=output_format,
-                               reuse_rmsmean=reuse_rmsmean)
+                               reuse_rmsmean=reuse_rmsmean,
+                               force_finding=force_finding)
 
     if not outcat:
         print('No FITS catalog generated, no further operations are performed')
         sys.exit()
 
-    # Check what format output catalog is
-    if outcat.endswith('.fits'):
-        bdsf_cat = Table.read(outcat)
-    elif outcat.endswith('.csv'):
-        bdsf_cat = Table.read(outcat, comment='#', delimiter=',',
-                              format='ascii.commented_header', header_start=4)
+    bdsf_cat = helpers.open_catalog(outcat)
 
     # Get the island threshold for later use
     path = Path(__file__).parent / bdsf_args
@@ -503,7 +517,7 @@ def new_argument_parser():
                         help="""Specify RMS alternative image to use for plotting 
                                 (default = use RMS image from sourcefinding)""")
     parser.add_argument("--reuse_rmsmean", action='store_true',
-                        help="""Use already present rms and mean images.""")
+                        help="""Use already present rms and mean images for sourcefinding.""")
     parser.add_argument("--parfile", default=None, type=str,
                         help="""Alternative PyBDSF parameter file, without .json extension.""")
     parser.add_argument("--survey", default=None, help="Name of the survey to be used in source ids.")
@@ -513,6 +527,9 @@ def new_argument_parser():
     parser.add_argument("--redo_catalog", default=None,
                         help="""Specify catalog file if you want some part of the process
                                 to be redone, but want to skip sourcefinding""")
+    parser.add_argument("--force_finding", default=None,
+                        help="""Specify catalog file to get source positions from
+                                to force source finding on those locations.""")
     return parser
 
 if __name__ == '__main__':

@@ -7,6 +7,7 @@ from pathlib import Path
 from astropy.coordinates import SkyCoord
 from astropy import units as u
 from astropy.io import fits
+from astropy.table import Table
 import astropy.wcs as WCS
 
 import casacore.images as pim
@@ -38,6 +39,19 @@ def open_fits_casa(file):
         os.system('rm temp.fits')
 
     return imagedata
+
+def open_catalog(file):
+    """
+    Open pybdsf catalog, taking into account format
+    """
+
+    if file.endswith('.csv'):
+        cat = Table.read(file, comment='#', delimiter=',',
+                          format='ascii.commented_header', header_start=4)
+    else:
+        cat = Table.read(file)
+
+    return cat
 
 def make_header(catheader):
     """

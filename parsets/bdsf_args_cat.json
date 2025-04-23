@@ -6,15 +6,12 @@
         "rms_box" : "(150,15)",
         "adaptive_rms_box" : true,
         "adaptive_thresh" : 50.0,
-        "rms_box_bright" : null,
-		"atrous_do" : true,
-		"atrous_orig_isl" : true,
-		"atrous_jmax" : 3
+        "rms_box_bright" : "(50,15)"
     },
     "export_image" : {
         "ch0" : false,
         "rms" : true,
-        "mean" : false,
+        "mean" : true,
         "pi" : false,
         "gaus_resid" : true,
         "shap_resid" : false,
