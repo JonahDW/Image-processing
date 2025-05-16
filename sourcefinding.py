@@ -7,7 +7,7 @@ import ast
 
 import numpy as np
 import matplotlib
-#matplotlib.use('Agg')
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 from argparse import ArgumentParser
@@ -25,7 +25,7 @@ from regions import EllipseSkyRegion, Regions
 import bdsf
 import helpers
 
-def run_bdsf(image, output_dir, argfile, output_format, reuse_rmsmean=False, force_finding=None):
+def run_bdsf(image, output_dir, argfile, output_format, reuse_rmsmean=False):
     '''
     Run PyBDSF on an image
 
@@ -49,24 +49,12 @@ def run_bdsf(image, output_dir, argfile, output_format, reuse_rmsmean=False, for
         if args_dict['process_image']['rms_box_bright'] is not None:
             args_dict['process_image']['rms_box_bright'] = ast.literal_eval(args_dict['process_image']['rms_box_bright'])
 
-    incl_empty = False
-    if force_finding:
-        force_finding = force_finding[force_finding['Sep_PC'] < 0.85]
-        src_ra_dec = list(zip(force_finding['RA'], force_finding['DEC']))
-        img = bdsf.process_image(image, **args_dict['process_image'],
-                                 src_ra_dec=src_ra_dec,
-                                 aperture=15)
-        # For the catalog writing
-        incl_empty = True
-
     elif reuse_rmsmean:
         img = bdsf.process_image(image, **args_dict['process_image'],
                                  rmsmean_map_filename=[imname+'_mean.fits',
                                                        imname+'_rms.fits'])
     else:
         img = bdsf.process_image(image, **args_dict['process_image'])
-
-    img.show_fit(ch0_flagged=True)
 
     for img_type in args_dict['export_image']:
         if args_dict['export_image'][img_type]:
@@ -105,7 +93,6 @@ def run_bdsf(image, output_dir, argfile, output_format, reuse_rmsmean=False, for
             img.write_catalog(outfile=outcatalog,
                               format=fmt,
                               catalog_type=cat_type,
-                              incl_empty=incl_empty,
                               clobber=True)
             if fmt == 'fits' and cat_type == 'srl':
                 outcat = outcatalog
@@ -374,7 +361,6 @@ def main():
     spectral_index = args.spectral_index
     reuse_rmsmean = args.reuse_rmsmean
     redo_catalog = args.redo_catalog
-    force_finding = args.force_finding
     parfile = args.parfile
 
     # Catalog and mask options
@@ -414,9 +400,6 @@ def main():
     if output_format is None:
         output_format = ['fits:srl']
 
-    if force_finding:
-        force_finding = helpers.open_catalog(force_finding)
-
     if redo_catalog:
         print(f'Using previously generated catalog and skipping sourcefinding')
         outcat, img = fake_run_bdsf(inpimage, redo_catalog)
@@ -424,8 +407,7 @@ def main():
         outcat, img = run_bdsf(inpimage, output_dir,
                                argfile=bdsf_args,
                                output_format=output_format,
-                               reuse_rmsmean=reuse_rmsmean,
-                               force_finding=force_finding)
+                               reuse_rmsmean=reuse_rmsmean)
 
     if not outcat:
         print('No FITS catalog generated, no further operations are performed')
@@ -527,9 +509,6 @@ def new_argument_parser():
     parser.add_argument("--redo_catalog", default=None,
                         help="""Specify catalog file if you want some part of the process
                                 to be redone, but want to skip sourcefinding""")
-    parser.add_argument("--force_finding", default=None,
-                        help="""Specify catalog file to get source positions from
-                                to force source finding on those locations.""")
     return parser
 
 if __name__ == '__main__':
