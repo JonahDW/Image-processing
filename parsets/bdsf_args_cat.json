@@ -2,21 +2,18 @@
     "process_image" : {
         "thresh_isl" : 3.0,
         "thresh_pix" : 5.0,
-        "group_by_isl" : true,
-        "rms_box" : "(150,15)",
+        "group_by_isl" : false,
+        "rms_box" : null,
         "adaptive_rms_box" : true,
         "adaptive_thresh" : 50.0,
-        "rms_box_bright" : null,
-		"atrous_do" : true,
-		"atrous_orig_isl" : true,
-		"atrous_jmax" : 3
+        "rms_box_bright" : null
     },
     "export_image" : {
         "ch0" : false,
-        "rms" : true,
+        "rms" : false,
         "mean" : false,
         "pi" : false,
-        "gaus_resid" : true,
+        "gaus_resid" : false,
         "shap_resid" : false,
         "psf_major" : false,
         "psf_minor" : false,

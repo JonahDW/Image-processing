@@ -394,15 +394,23 @@ def match_catalogs(internal, external, extbig, sigma_extent, search_dist, overla
 
     # Get matches for each source in 'big' catalog
     matches = []
+    n_matches = 0
     for source in big.sources:
-        matches.append(source.match(small.reduced_cat['ra'],
-                                    small.reduced_cat['dec'],
-                                    small.reduced_cat['majax'],
-                                    small.reduced_cat['minax'],
-                                    small.reduced_cat['pa'],
-                                    sigma_extent, search_dist,
-                                    helpers.make_header(internal.header), 
-                                    overlap_percentage))
+        matched_sources = source.match(small.reduced_cat['ra'],
+                                       small.reduced_cat['dec'],
+                                       small.reduced_cat['majax'],
+                                       small.reduced_cat['minax'],
+                                       small.reduced_cat['pa'],
+                                       sigma_extent, search_dist,
+                                       helpers.make_header(internal.header),
+                                       overlap_percentage)
+        n_matches += len(matched_sources)
+        matches.append(matched_sources)
+
+    #If no sources were matched, exit
+    if n_matches == 0:
+        print('No sources were matched, exiting')
+        sys.exit()
 
     return matches
 
@@ -802,6 +810,8 @@ def write_to_catalog(internal, external, matches, extbig, match_info, fluxtype, 
             for j in match:
                 small.cat[j]['idx'] = i
 
+    if big.name == small.name:
+        small.name += '_1'
     out = join(big.cat, small.cat, keys='idx', 
                table_names=[big.name,small.name])
 
@@ -841,24 +851,28 @@ def main():
 
     input_cat_file = args.input_cat
     ext_cat = args.ext_cat
-    fluxtype = args.fluxtype
-    dpi = args.dpi
 
+    # Matching options
+    fluxtype = args.fluxtype
+    alpha = args.alpha
+    sigma_extent = args.match_sigma_extent
+    search_dist = args.search_dist/3600 # to degrees
+    source_overlap = args.source_overlap_percent
+
+    # Output options
+    output = args.output
     astro = args.astro
     flux = args.flux
     plot = args.plot
-    alpha = args.alpha
-    output = args.output
-    survey_name = args.survey_name
+    dpi = args.dpi
     annotate = args.annotate
     annotate_nonmatched = args.annotate_nonmatched
+
+    # Catalog options
+    survey_name = args.survey_name
     ra_center = args.ra_center
     dec_center = args.dec_center
     fov = args.fov
-
-    sigma_extent   = args.match_sigma_extent
-    search_dist    = args.search_dist/3600 # to degrees
-    source_overlap = args.source_overlap_percent
 
     input_cat = Table.read(input_cat_file)
     int_catalog = BDSFCatalog(input_cat, input_cat_file, survey_name, ra_center, dec_center, fov)

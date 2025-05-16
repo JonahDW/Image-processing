@@ -7,7 +7,7 @@ import ast
 
 import numpy as np
 import matplotlib
-#matplotlib.use('Agg')
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 from argparse import ArgumentParser
@@ -49,7 +49,7 @@ def run_bdsf(image, output_dir, argfile, output_format, reuse_rmsmean=False):
         if args_dict['process_image']['rms_box_bright'] is not None:
             args_dict['process_image']['rms_box_bright'] = ast.literal_eval(args_dict['process_image']['rms_box_bright'])
 
-    if reuse_rmsmean:
+    elif reuse_rmsmean:
         img = bdsf.process_image(image, **args_dict['process_image'],
                                  rmsmean_map_filename=[imname+'_mean.fits',
                                                        imname+'_rms.fits'])
@@ -58,7 +58,8 @@ def run_bdsf(image, output_dir, argfile, output_format, reuse_rmsmean=False):
 
     for img_type in args_dict['export_image']:
         if args_dict['export_image'][img_type]:
-            img.export_image(outfile=impath+'_'+img_type+'.fits', clobber=True, img_type=img_type)
+            img.export_image(outfile=impath+'_'+img_type+'.fits', 
+                             clobber=True, img_type=img_type)
 
     outcat = None
     for of in output_format:
@@ -391,7 +392,7 @@ def main():
         output_dir = os.path.join(os.path.dirname(inpimage),
                                   os.path.basename(inpimage).rsplit('.',1)[0]+'_pybdsf')
     else:
-        output_dir = os.path.join(outdir, os.path.basename(inpimage).rsplit('.',1)[0]+'_pybdsf')
+        output_dir = outdir
     imname = os.path.join(output_dir, os.path.basename(inpimage).rsplit('.',1)[0])
     if not os.path.exists(output_dir):
         os.mkdir(output_dir)
@@ -412,12 +413,7 @@ def main():
         print('No FITS catalog generated, no further operations are performed')
         sys.exit()
 
-    # Check what format output catalog is
-    if outcat.endswith('.fits'):
-        bdsf_cat = Table.read(outcat)
-    elif outcat.endswith('.csv'):
-        bdsf_cat = Table.read(outcat, comment='#', delimiter=',',
-                              format='ascii.commented_header', header_start=4)
+    bdsf_cat = helpers.open_catalog(outcat)
 
     # Get the island threshold for later use
     path = Path(__file__).parent / bdsf_args
@@ -503,7 +499,7 @@ def new_argument_parser():
                         help="""Specify RMS alternative image to use for plotting 
                                 (default = use RMS image from sourcefinding)""")
     parser.add_argument("--reuse_rmsmean", action='store_true',
-                        help="""Use already present rms and mean images.""")
+                        help="""Use already present rms and mean images for sourcefinding.""")
     parser.add_argument("--parfile", default=None, type=str,
                         help="""Alternative PyBDSF parameter file, without .json extension.""")
     parser.add_argument("--survey", default=None, help="Name of the survey to be used in source ids.")

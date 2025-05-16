@@ -2,10 +2,10 @@
     "process_image" : {
         "thresh_isl" : 7.0,
         "thresh_pix" : 10.0,
-        "rms_box" : "(150,15)",
+        "rms_box" : null,
         "adaptive_rms_box" : true,
-        "adaptive_thresh" : 100.0,
-        "rms_box_bright" : "(50,15)"
+        "adaptive_thresh" : 50.0,
+        "rms_box_bright" : null
     },
     "export_image" : {
         "ch0" : true,
@@ -13,7 +13,9 @@
         "mean" : false,
         "pi" : false,
         "gaus_resid" : false,
+        "gaus_model" : false,
         "shap_resid" : false,
+        "shap_model" : false,
         "psf_major" : false,
         "psf_minor" : false,
         "psf_pa" : false,
