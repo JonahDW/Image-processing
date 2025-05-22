@@ -49,7 +49,7 @@ def run_bdsf(image, output_dir, argfile, output_format, reuse_rmsmean=False):
         if args_dict['process_image']['rms_box_bright'] is not None:
             args_dict['process_image']['rms_box_bright'] = ast.literal_eval(args_dict['process_image']['rms_box_bright'])
 
-    elif reuse_rmsmean:
+    if reuse_rmsmean:
         img = bdsf.process_image(image, **args_dict['process_image'],
                                  rmsmean_map_filename=[imname+'_mean.fits',
                                                        imname+'_rms.fits'])
