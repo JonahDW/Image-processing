@@ -61,7 +61,8 @@ def run_bdsf(image, output_dir, argfile, output_format, reuse_rmsmean=False):
             img.export_image(outfile=impath+'_'+img_type+'.fits', 
                              clobber=True, img_type=img_type)
 
-    outcat = None
+    out_srl_cat = None
+    out_gaus_cat = None
     for of in output_format:
         fmt = of.lower().split(':')
         if len(fmt) == 1:
@@ -95,11 +96,13 @@ def run_bdsf(image, output_dir, argfile, output_format, reuse_rmsmean=False):
                               catalog_type=cat_type,
                               clobber=True)
             if fmt == 'fits' and cat_type == 'srl':
-                outcat = outcatalog
+                out_srl_cat = outcatalog
+            if fmt == 'fits' and cat_type == 'gaul':
+                out_gaus_cat = outcatalog
 
-    return outcat, img
+    return out_srl_cat, out_gaus_cat, img
 
-def fake_run_bdsf(image, catalog_file):
+def fake_run_bdsf(image):
     '''
     Fake run PyBDSF on an image, only getting image parameters
 
@@ -111,7 +114,7 @@ def fake_run_bdsf(image, catalog_file):
     img = bdsf.process_image(image, advanced_opts=True,
                              stop_at='read')
 
-    return catalog_file, img
+    return img
 
 def read_alpha(inpimage, alpha_image, catalog, regions):
     '''
@@ -296,13 +299,6 @@ def plot_sf_results(image_file, imname, regions, max_sep, plot, plot_isl, thresh
 
     if rms_image is None:
         rms_image = imname+'_rms.fits'
-    mean_image = imname+'_mean.fits'
-
-    # If mean image exists, subtract
-    if os.path.exists(mean_image):
-        mean = helpers.open_fits_casa(mean_image)
-        mean_img = np.squeeze(mean[0].data)
-        img -= mean_image
 
     # If rms image exists, divide and set max to 5
     if os.path.exists(rms_image):
@@ -350,11 +346,11 @@ def main():
     args = parser.parse_args()
 
     inpimage = args.image
-    mode = args.mode
 
     # Output options
     outdir = args.outdir
     output_format = args.output_format
+    mask = args.mask
 
     # Additional input options
     rms_image = args.rms_image
@@ -374,80 +370,88 @@ def main():
     plot = args.plot
     plot_isl = args.plot_isl
 
-    if mode.lower() in 'cataloging':
-        if parfile is None:
-            bdsf_args = 'parsets/bdsf_args_cat.json'
-        else:
-            bdsf_args = f'parsets/{parfile}.json'
-    elif mode.lower() in 'masking':
-        if parfile is None:
-            bdsf_args = 'parsets/bdsf_args_mask.json'
-        else:
-            bdsf_args = f'parsets/{parfile}.json'
+    if parfile:
+        bdsf_args = f'parsets/{parfile}.json'
+    elif mask:
+        bdsf_args = 'parsets/bdsf_args_mask.json'
     else:
-        print(f'Invalid mode {mode}, please choose between c(ataloging) or m(asking)')
-        sys.exit()
+        bdsf_args = 'parsets/bdsf_args_cat.json'
 
     if outdir is None:
         output_dir = os.path.join(os.path.dirname(inpimage),
                                   os.path.basename(inpimage).rsplit('.',1)[0]+'_pybdsf')
     else:
         output_dir = outdir
-    imname = os.path.join(output_dir, os.path.basename(inpimage).rsplit('.',1)[0])
     if not os.path.exists(output_dir):
         os.mkdir(output_dir)
+    imname = os.path.join(output_dir, os.path.basename(inpimage).rsplit('.',1)[0])
 
+    # Standard output is source list, Gaussian list for masking
     if output_format is None:
-        output_format = ['fits:srl']
+        if mask:
+            output_format = ['fits:gaus']
+        else:
+            output_format = ['fits:srl']
 
     if redo_catalog:
         print(f'Using previously generated catalog and skipping sourcefinding')
-        outcat, img = fake_run_bdsf(inpimage, redo_catalog)
+        img = fake_run_bdsf(inpimage)
+        if mask:
+            out_srl_cat = None
+            out_gaus_cat = redo_catalog
+        else:
+            out_srl_cat = redo_catalog
+            out_gaus_cat = None
     else:
-        outcat, img = run_bdsf(inpimage, output_dir,
-                               argfile=bdsf_args,
-                               output_format=output_format,
-                               reuse_rmsmean=reuse_rmsmean)
+        out_srl_cat, out_gaus_cat, img = run_bdsf(inpimage, output_dir,
+                                                  argfile=bdsf_args,
+                                                  output_format=output_format,
+                                                  reuse_rmsmean=reuse_rmsmean)
 
-    if not outcat:
+    if not out_srl_cat and not out_gaus_cat:
         print('No FITS catalog generated, no further operations are performed')
         sys.exit()
 
-    bdsf_cat = helpers.open_catalog(outcat)
+    if mask:
+        # Just output mask files and be done
+        bdsf_gaus_cat = helpers.open_catalog(out_gaus_cat)
+        if mask.lower() == 'crtf':
+            bdsf_regions = catalog_to_regions(bdsf_gaus_cat)
+            write_crtf_mask(imname, bdsf_regions, size)
+        elif mask.lower() == 'fits':
+            write_fits_mask(imname, inpimage, thresh_isl, rms_image)
+        else:
+            bdsf_regions = catalog_to_regions(bdsf_gaus_cat)
+            write_crtf_mask(imname, bdsf_regions, size)
+            write_fits_mask(imname, inpimage, thresh_isl, rms_image)
+        sys.exit()
 
-    # Get the island threshold for later use
+    # Do catalogs
+    for outcat in [out_gaus_cat,out_srl_cat]:
+        if outcat:
+            bdsf_cat = helpers.open_catalog(outcat)
+
+            bdsf_cat = transform_cat(bdsf_cat, img, max_separation, 
+                                     flag_artefacts, pointing, survey)
+            bdsf_regions = catalog_to_regions(bdsf_cat)
+            if spectral_index:
+                bdsf_cat = read_alpha(inpimage, spectral_index, bdsf_cat, bdsf_regions)
+
+            print('Wrote updated catalog to '+outcat)
+            bdsf_cat.write(outcat, overwrite=True)
+
+    # Get the island threshold for plotting
     path = Path(__file__).parent / bdsf_args
     with open(path) as f:
         args_dict = json.load(f)
     thresh_isl = args_dict['process_image']['thresh_isl']
 
-    # Determine output by mode
-    if mode.lower() in 'cataloging':
-        bdsf_cat = transform_cat(bdsf_cat, img, max_separation, 
-                                flag_artefacts, pointing, survey)
-        bdsf_regions = catalog_to_regions(bdsf_cat)
-
-        if plot:
-            if flag_artefacts:
-                flag_regions = catalog_to_regions(bdsf_cat[bdsf_cat['Flag_Artifact'] == True])
-                plot_sf_results(inpimage, imname, bdsf_regions, max_separation, 
-                                plot, plot_isl, thresh_isl, rms_image, flag_regions)
-            else:
-                plot_sf_results(inpimage, imname, bdsf_regions, max_separation, 
-                                plot, plot_isl, thresh_isl, rms_image)
-
-        if spectral_index:
-            bdsf_cat = read_alpha(inpimage, spectral_index, bdsf_cat, bdsf_regions)
-
-        print(f'Wrote catalog to {imname}_bdsfcat.fits')
-        bdsf_cat.write(imname+'_bdsfcat.fits', overwrite=True)
-
-    if mode.lower() in 'masking':
-        bdsf_regions = catalog_to_regions(bdsf_cat)
-        write_crtf_mask(imname, bdsf_regions, size)
-        write_fits_mask(imname, inpimage, thresh_isl, rms_image)
-
-        if plot:
+    if plot:
+        if flag_artefacts:
+            flag_regions = catalog_to_regions(bdsf_cat[bdsf_cat['Flag_Artifact'] == True])
+            plot_sf_results(inpimage, imname, bdsf_regions, max_separation, 
+                            plot, plot_isl, thresh_isl, rms_image, flag_regions)
+        else:
             plot_sf_results(inpimage, imname, bdsf_regions, max_separation, 
                             plot, plot_isl, thresh_isl, rms_image)
 
@@ -459,11 +463,6 @@ def new_argument_parser():
 
     parser = ArgumentParser()
 
-    parser.add_argument("mode", type=str,
-                        help="""Purpose of the sourcefinding, choose between
-                                cataloging (c) or masking (m). This choice will determine
-                                the parameter file that PyBDSF will use, as well as the
-                                output files.""")
     parser.add_argument("image", type=str,
                         help="""Name of the image to perform sourcefinding on.""")
     parser.add_argument("-o", "--output_format", nargs='+', default=None,
@@ -473,6 +472,9 @@ def new_argument_parser():
                                 source list (srl) or gaussian list (gaul), default srl. Currently, only
                                 fits and csv formats source list can be used for further processing. 
                                 Input can be multiple entries, e.g. -o fits:srl ds9 (default = fits:srl).""")
+    parser.add_argument("--mask", nargs='?', const=True,
+                        help="""If specified, use mask parameter file 'bdsf_args_mask', and writes out
+                                mask files. Choices are at the moment between 'crtf' or 'fits'.""")
     parser.add_argument("--outdir", default=None, type=str, 
                         help="Name of directory to place output, default is the image directory.")
     parser.add_argument("--size", default=1.0, type=float,
