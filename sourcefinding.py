@@ -2,8 +2,9 @@
 
 import os
 import sys
-import json
 import ast
+import json
+import copy
 
 import numpy as np
 import matplotlib
@@ -52,11 +53,11 @@ def run_bdsf(image, output_dir, argfile, output_format, reuse_rmsmean=False):
     if 'rms_box' in args_dict['process_image']:
         rms_box_opt = args_dict['process_image']['rms_box']
         if rms_box_opt is not None:
-            rms_box_opt = ast.literal_eval(rms_box_opt)
+            args_dict['process_image']['rms_box'] = ast.literal_eval(rms_box_opt)
     if 'rms_box_bright' in args_dict['process_image']:
         rms_box_bright_opt = args_dict['process_image']['rms_box_bright']
         if rms_box_bright_opt is not None:
-            rms_box_bright_opt = ast.literal_eval(rms_box_bright_opt)
+            args_dict['process_image']['rms_box_bright'] = ast.literal_eval(rms_box_bright_opt)
 
     if reuse_rmsmean:
         img = bdsf.process_image(image, **args_dict['process_image'],
@@ -400,7 +401,6 @@ def main():
 
     # Plotting options
     plot = args.plot
-    plot_isl = args.plot_isl
 
     if parfile:
         bdsf_args = f'parsets/{parfile}.json'
@@ -451,34 +451,41 @@ def main():
         write_crtf_mask(imname, bdsf_regions, size)
 
     # Do catalogs, starting with source catalogue
+    bdsf_cat = None
     source_names = False
     if out_srl_cat:
-        bdsf_cat = helpers.open_catalog(out_srl_cat)
+        srl_cat = helpers.open_catalog(out_srl_cat)
 
-        bdsf_cat = transform_cat(bdsf_cat, img, max_separation, 
-                                 flag_artefacts, pointing, survey)
-        bdsf_regions = catalog_to_regions(bdsf_cat)
+        srl_cat = transform_cat(srl_cat, img, max_separation, 
+                                flag_artefacts, pointing, survey)
+        srl_regions = catalog_to_regions(srl_cat)
         if spectral_index:
-            bdsf_cat = read_alpha(inpimage, spectral_index, bdsf_cat, bdsf_regions)
-        # Separate table with source names for Gaussian catalog
-        source_names = bdsf_cat.keep_columns(['Source_name','Source_id'])
+            srl_cat = read_alpha(inpimage, spectral_index, srl_cat, srl_regions)
+        # Separate table with source names to assign to Gaussian catalog
+        source_names = copy.copy(srl_cat)
+        source_names.keep_columns(['Source_name','Source_id'])
 
         print('Wrote updated catalog to '+out_srl_cat)
-        bdsf_cat.write(out_srl_cat, overwrite=True)
+        srl_cat.write(out_srl_cat, overwrite=True)
+        bdsf_cat = srl_cat
+        bdsf_regions = srl_regions
 
     # Gaussian catalogue
     if out_gaus_cat:
-        bdsf_cat = helpers.open_catalog(out_gaus_cat)
+        gaus_cat = helpers.open_catalog(out_gaus_cat)
 
-        bdsf_cat = transform_cat(bdsf_cat, img, max_separation, 
+        gaus_cat = transform_cat(gaus_cat, img, max_separation, 
                                  flag_artefacts, pointing, survey,
                                  source_names=source_names)
-        bdsf_regions = catalog_to_regions(bdsf_cat)
+        gaus_regions = catalog_to_regions(gaus_cat)
         if spectral_index:
-            bdsf_cat = read_alpha(inpimage, spectral_index, bdsf_cat, bdsf_regions)
+            gaus_cat = read_alpha(inpimage, spectral_index, gaus_cat, gaus_regions)
 
         print('Wrote updated catalog to '+out_gaus_cat)
-        bdsf_cat.write(out_gaus_cat, overwrite=True)
+        gaus_cat.write(out_gaus_cat, overwrite=True)
+        if bdsf_cat is None:
+            bdsf_cat = gaus_cat
+            bdsf_regions = gaus_regions
 
     if plot:
         if flag_artefacts:
@@ -507,7 +514,7 @@ def new_argument_parser():
                                 default srl. Currently, only fits and csv formats 
                                 can be used for further processing. Input can be multiple
                                 entries, e.g. -o fits:srl ds9 (default = fits:srl).""")
-    parser.add_argument("--mask", action='stor_true',
+    parser.add_argument("--mask", action='store_true',
                         help="""If specified, mask parameter file 'bdsf_args_mask' is used, 
                                 and crtf mask file is produced.""")
     parser.add_argument("--outdir", default=None, type=str, 

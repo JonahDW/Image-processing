@@ -20,9 +20,8 @@ Perform source extraction on an image, outputting a catalog of sources or Gaussi
 Will perform sourcefinding on `<my_image>` and produce both a fits source catalog and DS9 region file. A plot will be produced showing the image and the sources as ellipses overlaid. 
 
 ```
-usage: sourcefinding.py [-h] [-o OUTPUT_FORMAT [OUTPUT_FORMAT ...]]
-                        [--mask [MASK]] [--outdir OUTDIR] [--size SIZE]
-                        [--plot [PLOT]] [--plot_isl]
+usage: sourcefinding.py [-h] [-o OUTPUT_FORMAT [OUTPUT_FORMAT ...]] [--mask]
+                        [--outdir OUTDIR] [--size SIZE] [--plot [PLOT]]
                         [--spectral_index [SPECTRAL_INDEX]]
                         [--max_separation MAX_SEPARATION] [--flag_artefacts]
                         [--rms_image RMS_IMAGE] [--reuse_rmsmean]
@@ -38,23 +37,20 @@ optional arguments:
   -o OUTPUT_FORMAT [OUTPUT_FORMAT ...], --output_format OUTPUT_FORMAT [OUTPUT_FORMAT ...]
                         Output format of the catalog, supported formats are:
                         ds9, fits, star, kvis, ascii, csv. In case of fits,
-                        ascii, ds9, and csv, additionally choose output
-                        catalog as either source list (srl) or gaussian list
-                        (gaul), default srl. Currently, only fits and csv
-                        formats source list can be used for further
-                        processing. Input can be multiple entries, e.g. -o
-                        fits:srl ds9 (default = fits:srl).
-  --mask [MASK]         If specified, use mask parameter file
-                        'bdsf_args_mask', and writes out mask files. Choices
-                        are at the moment between 'crtf' or 'fits'.
-  --outdir OUTDIR       Name of directory to place output, default is the
-                        image directory.
+                        ascii, ds9, or csv, additionally choose output catalog
+                        as either source list (srl) or gaussian list (gaul),
+                        default srl. Currently, only fits and csv formats can
+                        be used for further processing. Input can be multiple
+                        entries, e.g. -o fits:srl ds9 (default = fits:srl).
+  --mask                If specified, mask parameter file 'bdsf_args_mask' is
+                        used, and crtf mask file is produced.
+  --outdir OUTDIR       Name of directory to place output (default = image
+                        directory).
   --size SIZE           If masking, multiply the size of the masks by this
                         amount (default = 1.0).
   --plot [PLOT]         Plot the results of the sourcefinding as a png of the
                         image with sources overlaid, optionally provide an
-                        output filename (default = do not plot the results).
-  --plot_isl            Plot island boundaries along with source ellipses.
+                        output filename (default = no plot).
   --spectral_index [SPECTRAL_INDEX]
                         Measure the spectral indices of the sources using a
                         specified spectral index image. Can be FITS or CASA
@@ -62,7 +58,7 @@ optional arguments:
   --max_separation MAX_SEPARATION
                         Only include sources in the final catalogue within a
                         specified distance (in degrees) from the image centre.
-                        (default = include all)
+                        (default = include all sources)
   --flag_artefacts      Add column for flagging artefacts around bright
                         sources (default = do not flag)
   --rms_image RMS_IMAGE
@@ -72,14 +68,12 @@ optional arguments:
                         sourcefinding.
   --parfile PARFILE     Alternative PyBDSF parameter file, without .json
                         extension.
-  --survey SURVEY       Name of the survey to be used in source ids.
-  --pointing POINTING   Name of the pointing to be used in the pointing id. If
-                        not specified this is taken from the 'OBJECT' header
-                        flag.
+  --survey SURVEY       Name of the survey to be used in source names.
+  --pointing POINTING   Name of the pointing to be used in the pointing id.
+                        (default = 'OBJECT' from image header).
   --redo_catalog REDO_CATALOG
                         Specify catalog file if you want some part of the
                         process to be redone, but want to skip sourcefinding
-
 ```
 
 ## catalog_matching.py
