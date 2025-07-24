@@ -15,7 +15,7 @@ from astropy.table import Table, join, setdiff
 import numpy as np
 from matplotlib import pyplot as plt
 
-from kvis_write_lib import *
+from utils.kvis_write_lib import *
 
 # ----
 # This tool is an add on to the

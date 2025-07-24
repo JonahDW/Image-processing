@@ -16,24 +16,31 @@ from pathlib import Path
 from astropy.wcs import WCS
 from astropy.io import fits, ascii
 from astropy import units as u
-from astropy.table import Table, Column
+from astropy.table import Table, Column, join
 from astropy.coordinates import SkyCoord
 from astropy.visualization.wcsaxes import SphericalCircle
 
 from regions import EllipseSkyRegion, Regions
-
 import bdsf
-import helpers
+
+from utils import helpers
 
 def run_bdsf(image, output_dir, argfile, output_format, reuse_rmsmean=False):
-    '''
+    """
     Run PyBDSF on an image
 
     Keyword arguments:
-    image -- Name of image
-    argfile -- Input json file containing arguments
-               for bdsf functions
-    '''
+    image (str)          -- Name of image
+    output_dir (str)     -- Output directory
+    argfile (str)        -- Input json file with bdsf arguments
+    output_format (list) -- Output format(s) of catalog
+    reuse_rmsmean (bool) -- Reuse rms and mean image in image directory
+
+    Returns:
+    out_srl_cat (str)  -- Path to source catalog
+    out_gaus_cat (str) -- Path to Gaussian component catalog
+    img (bdsf Image)   -- PyBDSF Image instance
+    """
     imname = os.path.basename(image).rsplit('.',1)[0]
     impath = os.path.join(output_dir,imname)
 
@@ -43,11 +50,13 @@ def run_bdsf(image, output_dir, argfile, output_format, reuse_rmsmean=False):
 
     # Make sure tuples are correctly parsed
     if 'rms_box' in args_dict['process_image']:
-        if args_dict['process_image']['rms_box'] is not None:
-            args_dict['process_image']['rms_box'] = ast.literal_eval(args_dict['process_image']['rms_box'])
+        rms_box_opt = args_dict['process_image']['rms_box']
+        if rms_box_opt is not None:
+            rms_box_opt = ast.literal_eval(rms_box_opt)
     if 'rms_box_bright' in args_dict['process_image']:
-        if args_dict['process_image']['rms_box_bright'] is not None:
-            args_dict['process_image']['rms_box_bright'] = ast.literal_eval(args_dict['process_image']['rms_box_bright'])
+        rms_box_bright_opt = args_dict['process_image']['rms_box_bright']
+        if rms_box_bright_opt is not None:
+            rms_box_bright_opt = ast.literal_eval(rms_box_bright_opt)
 
     if reuse_rmsmean:
         img = bdsf.process_image(image, **args_dict['process_image'],
@@ -103,24 +112,34 @@ def run_bdsf(image, output_dir, argfile, output_format, reuse_rmsmean=False):
     return out_srl_cat, out_gaus_cat, img
 
 def fake_run_bdsf(image):
-    '''
+    """
     Fake run PyBDSF on an image, only getting image parameters
 
     Keyword arguments:
     image -- Name of image
-    argfile -- Input json file containing arguments
-               for bdsf functions
-    '''
+
+    Returns:
+    img -- PyBDSF Image instance
+    """
     img = bdsf.process_image(image, advanced_opts=True,
                              stop_at='read')
 
     return img
 
-def read_alpha(inpimage, alpha_image, catalog, regions):
-    '''
-    Determine spectral indices of the sources
-    '''
-    weight = helpers.open_fits_casa(inpimage)
+def read_alpha(image, alpha_image, catalog, regions):
+    """
+    Determine spectral indices of the sources given alpha image
+
+    Keyword arguments:
+    image (str)       -- Name of total intensity image
+    alpha_image (str) -- Name of spectral index image
+    catalog (table)   -- Catalogue of sources
+    regions (list)    -- Image regions corresponding to sources/Gaussians
+
+    Returns:
+    Catalog with spectral index columns added
+    """
+    weight = helpers.open_fits_casa(image)
     alpha = helpers.open_fits_casa(alpha_image)
 
     # Remove degenerate axes if any
@@ -144,10 +163,22 @@ def read_alpha(inpimage, alpha_image, catalog, regions):
 
     return catalog
 
-def transform_cat(catalog, img, max_separation, flag_artefacts, pointing_name, survey_name):
-    '''
-    Add names for sources in the catalog following IAU naming conventions
-    '''
+def transform_cat(catalog, img, max_separation, flag_artefacts, 
+                  pointing_name, survey_name, source_names=None):
+    """
+    Adjust catalogue with additional columns and metadata
+
+    Keyword arguments:
+    catalog (table)       -- Input catalogue of sources or Gaussian components
+    img (bdsf Image)      -- Image class instance from PyBDSF
+    flag_artefacts (bool) -- Whether to flag potential artefacts
+    pointing_name (str)   -- Name of pointing to add to catalog
+    survey_name (str)     -- Name of survey to add to source name
+    source_names (table)  -- Predetermined list of source names of all sources
+
+    Returns:
+    Updated catalog
+    """
     header = {}
     for i, x in enumerate(img.header):
         if x != 'HISTORY':
@@ -165,24 +196,30 @@ def transform_cat(catalog, img, max_separation, flag_artefacts, pointing_name, s
     else:
         survey_name = ''
 
-    ids = [survey_name+'J{0}{1}'.format(coord.ra.to_string(unit=u.hourangle,
-                                                           sep='',
-                                                           precision=2,
-                                                           pad=True),
-                                        coord.dec.to_string(sep='',
-                                                            precision=1,
-                                                            alwayssign=True,
-                                                            pad=True)) for coord in source_coord]
+    # Assign source names
+    if source_names is None:
+        ids = []
+        for coord in source_coord:
+            rastr = coord.ra.to_string(unit=u.hourangle, sep='',
+                                        precision=2, pad=True)
+            decstr = coord.dec.to_string(sep='', precision=1,
+                                          alwayssign=True, pad=True)
+            sourcestr = f'{survey_name}J{rastr}{decstr}'
+            ids.append(sourcestr)
+        catalog.add_column(ids, name='Source_name', index=0)
+    elif source_names:
+        # Match source names with source ids
+        catalog = join(source_names, catalog, keys='Source_id')
 
     sep = pointing_center.separation(source_coord)
     quality_flag = [1] * len(catalog)
 
     # Add columns at appropriate indices
-    col_a = Column(ids, name='Source_name')
-    col_b = Column(sep, name='Sep_PC')
-    col_c = Column(quality_flag, name='Quality_flag')
-    catalog.add_columns([col_a, col_b, col_c],
-                         indexes=[0,6,-1])
+    sep_idx = catalog.colnames.index('Total_flux')
+    col_a = Column(sep, name='Sep_PC')
+    col_b = Column(quality_flag, name='Quality_flag')
+    catalog.add_columns([col_a, col_b],
+                         indexes=[sep_idx,-1])
 
     # Add identifier
     if 'OBJECT' in header and pointing_name is None:
@@ -219,9 +256,16 @@ def transform_cat(catalog, img, max_separation, flag_artefacts, pointing_name, s
     return catalog
 
 def flag_artifacts(catalog, img):
-    '''
+    """
     Identify and flag artifacts
-    '''
+
+    Keyword arguments:
+    catalog (table)  -- Input catalog
+    img (bdsf Image) -- PyBDSF image instance
+
+    Returns:
+    Boolean array identifying suspected artifacts
+    """
     bright_idx = catalog['Peak_flux']*catalog['Sep_PC']**2/catalog['Isl_rms'] > 100
     idx = helpers.id_artifacts(catalog[bright_idx], catalog, img.beam[0])
 
@@ -233,52 +277,30 @@ def flag_artifacts(catalog, img):
     return flag_close
 
 def catalog_to_regions(catalog, ra='RA', dec='DEC', majax='Maj', minax='Min', PA='PA'):
-    '''
+    """
     Convert catalog to a list of regions
 
     Keyword arguments:
-    catalog -- Input catalog
-    ra, dec, majax, minax, PA -- Column names of containing required variables
-    '''
+    catalog (table) -- Input catalog
+    ra, dec, majax, minax, PA (str) -- Column names of containing required variables
+
+    Returns:
+    List or elliptical regions
+    """
     regions = Regions([
         EllipseSkyRegion(center=SkyCoord(source[ra], source[dec], unit='deg'),
                          height=source[majax]*u.deg, width=source[minax]*u.deg,
                          angle=source[PA]*u.deg) for source in catalog])
     return regions
 
-def write_fits_mask(imname, image_file, thresh_isl, rms_image=None):
-    """
-    Write an output fits containing binary mask
-
-    Keyword arguments:
-    outfile -- Name of the output mask file (CRTF)
-    regions -- Region or list of regions to write
-    size -- Multiply input major and minor axes by this amount
-    """
-    image = helpers.open_fits_casa(image_file)
-    if rms_image is None:
-        rms_image = imname+'_rms.fits'
-    rms = helpers.open_fits_casa(rms_image)
-
-    snr = np.squeeze(image[0].data)/np.squeeze(rms[0].data)
-    mask = np.zeros(snr.shape)
-    mask[snr > thresh_isl] = 1
-
-    # Store in existing HDU and write to fits
-    rms[0].data[0,0,:,:] = mask
-
-    outfile = imname+'_mask.fits'
-    print(f'Wrote mask file to {outfile}')
-    rms.writeto(outfile, overwrite=True)
-
 def write_crtf_mask(imname, regions, size=1.0):
     """
     Write an output file containing sources to mask
 
     Keyword arguments:
-    outfile -- Name of the output mask file (CRTF)
-    regions -- Region or list of regions to write
-    size -- Multiply input major and minor axes by this amount
+    imname (str)   -- Filename of the image
+    regions (list) -- Region or list of regions to write
+    size (float)   -- Size multiplier of regions
     """
     if size != 1.0:
         for region in regions:
@@ -289,10 +311,20 @@ def write_crtf_mask(imname, regions, size=1.0):
     print(f'Wrote mask file to {outfile}')
     regions.write(outfile, format='crtf')
 
-def plot_sf_results(image_file, imname, regions, max_sep, plot, plot_isl, thresh_isl, rms_image=None, flag_regions=None):
-    '''
+def plot_sf_results(image_file, imname, regions, max_sep, plot, 
+                     rms_image=None, flag_regions=None):
+    """
     Plot the results of the sourcefinding
-    '''
+
+    Keyword arguments:
+    image_file (str)    -- Filename of image
+    imname (str)        -- Filename of the image without extension
+    regions (list)      -- List of (source) regions to plot
+    max_sep (float)     -- Maximum distance to center to include sources
+    plot (bool or str)  -- If string specifies output filename
+    rms_image (str)     -- Filename of rms image
+    flag_regions (list) -- List of regions of flagged sources
+    """
     image = helpers.open_fits_casa(image_file)
     img = np.squeeze(image[0].data)
     vmax = np.percentile(img, 95)
@@ -316,19 +348,19 @@ def plot_sf_results(image_file, imname, regions, max_sep, plot, plot_isl, thresh
     ax.set_ylabel('DEC')
 
     for region in regions:
-        patch = region.to_pixel(wcs).as_artist(facecolor='none', edgecolor='m', lw=0.25)
+        patch = region.to_pixel(wcs).as_artist(facecolor='none', 
+                                               edgecolor='m', lw=0.25)
         ax.add_patch(patch)
-
-    if plot_isl:
-        ax.contour(img, origin='lower', colors='royalblue', levels=[thresh_isl], linewidths=0.25)
 
     if flag_regions is not None:
         for region in flag_regions:
-            patch = region.to_pixel(wcs).as_artist(facecolor='none', edgecolor='g', lw=0.25)
+            patch = region.to_pixel(wcs).as_artist(facecolor='none', 
+                                                   edgecolor='g', lw=0.25)
             ax.add_patch(patch)
 
     if max_sep is not None:
-        center = (image[0].header['CRVAL1'] * u.deg, image[0].header['CRVAL2'] * u.deg)
+        center = (image[0].header['CRVAL1'] * u.deg, 
+                  image[0].header['CRVAL2'] * u.deg)
         s = SphericalCircle(center, max_sep * u.deg,
                             edgecolor='white', facecolor='none', lw=1,
                             transform=ax.get_transform('fk5'))
@@ -415,45 +447,47 @@ def main():
     if mask:
         # Just output mask files and be done
         bdsf_gaus_cat = helpers.open_catalog(out_gaus_cat)
-        if mask.lower() == 'crtf':
-            bdsf_regions = catalog_to_regions(bdsf_gaus_cat)
-            write_crtf_mask(imname, bdsf_regions, size)
-        elif mask.lower() == 'fits':
-            write_fits_mask(imname, inpimage, thresh_isl, rms_image)
-        else:
-            bdsf_regions = catalog_to_regions(bdsf_gaus_cat)
-            write_crtf_mask(imname, bdsf_regions, size)
-            write_fits_mask(imname, inpimage, thresh_isl, rms_image)
-        sys.exit()
+        bdsf_regions = catalog_to_regions(bdsf_gaus_cat)
+        write_crtf_mask(imname, bdsf_regions, size)
 
-    # Do catalogs
-    for outcat in [out_gaus_cat,out_srl_cat]:
-        if outcat:
-            bdsf_cat = helpers.open_catalog(outcat)
+    # Do catalogs, starting with source catalogue
+    source_names = False
+    if out_srl_cat:
+        bdsf_cat = helpers.open_catalog(out_srl_cat)
 
-            bdsf_cat = transform_cat(bdsf_cat, img, max_separation, 
-                                     flag_artefacts, pointing, survey)
-            bdsf_regions = catalog_to_regions(bdsf_cat)
-            if spectral_index:
-                bdsf_cat = read_alpha(inpimage, spectral_index, bdsf_cat, bdsf_regions)
+        bdsf_cat = transform_cat(bdsf_cat, img, max_separation, 
+                                 flag_artefacts, pointing, survey)
+        bdsf_regions = catalog_to_regions(bdsf_cat)
+        if spectral_index:
+            bdsf_cat = read_alpha(inpimage, spectral_index, bdsf_cat, bdsf_regions)
+        # Separate table with source names for Gaussian catalog
+        source_names = bdsf_cat.keep_columns(['Source_name','Source_id'])
 
-            print('Wrote updated catalog to '+outcat)
-            bdsf_cat.write(outcat, overwrite=True)
+        print('Wrote updated catalog to '+out_srl_cat)
+        bdsf_cat.write(out_srl_cat, overwrite=True)
 
-    # Get the island threshold for plotting
-    path = Path(__file__).parent / bdsf_args
-    with open(path) as f:
-        args_dict = json.load(f)
-    thresh_isl = args_dict['process_image']['thresh_isl']
+    # Gaussian catalogue
+    if out_gaus_cat:
+        bdsf_cat = helpers.open_catalog(out_gaus_cat)
+
+        bdsf_cat = transform_cat(bdsf_cat, img, max_separation, 
+                                 flag_artefacts, pointing, survey,
+                                 source_names=source_names)
+        bdsf_regions = catalog_to_regions(bdsf_cat)
+        if spectral_index:
+            bdsf_cat = read_alpha(inpimage, spectral_index, bdsf_cat, bdsf_regions)
+
+        print('Wrote updated catalog to '+out_gaus_cat)
+        bdsf_cat.write(out_gaus_cat, overwrite=True)
 
     if plot:
         if flag_artefacts:
             flag_regions = catalog_to_regions(bdsf_cat[bdsf_cat['Flag_Artifact'] == True])
-            plot_sf_results(inpimage, imname, bdsf_regions, max_separation, 
-                            plot, plot_isl, thresh_isl, rms_image, flag_regions)
         else:
-            plot_sf_results(inpimage, imname, bdsf_regions, max_separation, 
-                            plot, plot_isl, thresh_isl, rms_image)
+            flag_regions = None
+        plot_sf_results(inpimage, imname, bdsf_regions, 
+                        max_separation, plot, rms_image, 
+                        flag_regions=flag_regions)
 
     # Make sure the log file is in the output folder
     logname = inpimage+'.pybdsf.log'
@@ -466,34 +500,33 @@ def new_argument_parser():
     parser.add_argument("image", type=str,
                         help="""Name of the image to perform sourcefinding on.""")
     parser.add_argument("-o", "--output_format", nargs='+', default=None,
-                        help="""Output format of the catalog, supported formats
-                                are: ds9, fits, star, kvis, ascii, csv. In case of fits,
-                                ascii, ds9, and csv, additionally choose output catalog as either
-                                source list (srl) or gaussian list (gaul), default srl. Currently, only
-                                fits and csv formats source list can be used for further processing. 
-                                Input can be multiple entries, e.g. -o fits:srl ds9 (default = fits:srl).""")
-    parser.add_argument("--mask", nargs='?', const=True,
-                        help="""If specified, use mask parameter file 'bdsf_args_mask', and writes out
-                                mask files. Choices are at the moment between 'crtf' or 'fits'.""")
+                        help="""Output format of the catalog, supported formats are: 
+                                ds9, fits, star, kvis, ascii, csv. In case of fits, 
+                                ascii, ds9, or csv, additionally choose output catalog 
+                                as either source list (srl) or gaussian list (gaul), 
+                                default srl. Currently, only fits and csv formats 
+                                can be used for further processing. Input can be multiple
+                                entries, e.g. -o fits:srl ds9 (default = fits:srl).""")
+    parser.add_argument("--mask", action='stor_true',
+                        help="""If specified, mask parameter file 'bdsf_args_mask' is used, 
+                                and crtf mask file is produced.""")
     parser.add_argument("--outdir", default=None, type=str, 
-                        help="Name of directory to place output, default is the image directory.")
+                        help="Name of directory to place output (default = image directory).")
     parser.add_argument("--size", default=1.0, type=float,
                         help="""If masking, multiply the size of the masks by this
                                 amount (default = 1.0).""")
     parser.add_argument("--plot", nargs="?", const=True,
-                        help="""Plot the results of the sourcefinding as a png
-                                of the image with sources overlaid, optionally
-                                provide an output filename (default = do
-                                not plot the results).""")
-    parser.add_argument("--plot_isl", action='store_true',
-                        help="""Plot island boundaries along with source ellipses.""")
+                        help="""Plot the results of the sourcefinding as a png of the 
+                                image with sources overlaid, optionally provide an 
+                                output filename (default = no plot).""")
     parser.add_argument("--spectral_index", nargs="?", const=True,
-                        help="""Measure the spectral indices of the sources using a specified
-                                spectral index image. Can be FITS or CASA format.
+                        help="""Measure the spectral indices of the sources using a 
+                                specified spectral index image. Can be FITS or CASA format.
                                 (default = do not measure spectral indices).""")
     parser.add_argument("--max_separation", default=None, type=float,
-                        help="""Only include sources in the final catalogue within a specified
-                                distance (in degrees) from the image centre. (default = include all)""")
+                        help="""Only include sources in the final catalogue within a 
+                                specified distance (in degrees) from the image centre. 
+                                (default = include all sources)""")
     parser.add_argument("--flag_artefacts", action='store_true', 
                         help="""Add column for flagging artefacts around 
                                 bright sources (default = do not flag)""")
@@ -501,13 +534,14 @@ def new_argument_parser():
                         help="""Specify RMS alternative image to use for plotting 
                                 (default = use RMS image from sourcefinding)""")
     parser.add_argument("--reuse_rmsmean", action='store_true',
-                        help="""Use already present rms and mean images for sourcefinding.""")
+                        help="Use already present rms and mean images for sourcefinding.")
     parser.add_argument("--parfile", default=None, type=str,
-                        help="""Alternative PyBDSF parameter file, without .json extension.""")
-    parser.add_argument("--survey", default=None, help="Name of the survey to be used in source ids.")
+                        help="Alternative PyBDSF parameter file, without .json extension.")
+    parser.add_argument("--survey", default=None, 
+                        help="Name of the survey to be used in source names.")
     parser.add_argument("--pointing", default=None, type=str,
                         help="""Name of the pointing to be used in the pointing id. 
-                                If not specified this is taken from the 'OBJECT' header flag.""")
+                                (default = 'OBJECT' from image header).""")
     parser.add_argument("--redo_catalog", default=None,
                         help="""Specify catalog file if you want some part of the process
                                 to be redone, but want to skip sourcefinding""")

@@ -18,7 +18,7 @@ from numpyencoder import NumpyEncoder
 import matplotlib.pyplot as plt
 from scipy.interpolate import interp1d
 
-import helpers
+from utils import helpers
 
 class Catalog:
 

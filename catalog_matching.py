@@ -23,9 +23,9 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 from shapely.geometry import Polygon
 
-import kvis_write_lib as kvis
-import searchcats as sc
-import helpers
+from utils import kvis_write_lib as kvis
+from utils import searchcats as sc
+from utils import helpers
 
 gc.enable()
 
