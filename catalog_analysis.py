@@ -244,17 +244,15 @@ class Catalog:
             plt.savefig(outfile, dpi=dpi)
             plt.close()
 
-    def plot_resolved_fraction(self, resolved_sigma, stacked_cat, fancy, dpi, no_plot=False):
+    def plot_resolved_fraction(self, resolved_sigma, resolved_offset, stacked_cat, fancy, dpi, no_plot=False):
         '''
         Plot fraction of resolved sources
         '''
-        cal_error = 0.0
-
         if stacked_cat:
             resolved_idx = self.table['Resolved']
         else:
             # Calculate errors on total flux and peak flux
-            sigma_s = np.sqrt(self.table['E_'+self.flux_col]**2 + (cal_error*self.table[self.flux_col])**2)
+            sigma_s = np.sqrt(self.table['E_'+self.flux_col]**2 + (resolved_offset*self.table[self.flux_col])**2)
 
             sigma_r = np.sqrt((sigma_s/self.table[self.flux_col])**2
                             - (self.table['E_Peak_flux']/self.table['Peak_flux'])**2
@@ -318,9 +316,12 @@ def main():
     catalog_file = args.catalog
     rms_image = args.rms_image
     comp_corr = args.comp_corr
-    resolved_sigma = args.resolved_sigma
+
     flux_col = args.flux_col
+    resolved_sigma = args.resolved_sigma
+    resolved_offset = args.resolved_offset
     stacked_cat = args.stacked_catalog
+
     no_plots = args.no_plots
     fancy = args.fancy
     dpi = args.dpi
@@ -341,7 +342,7 @@ def main():
     if comp_corr:
         catalog.plot_diff_number_counts(flux_col, fancy, dpi, completeness=comp_corr, no_plot=no_plots)
 
-    resolved = catalog.plot_resolved_fraction(resolved_sigma, stacked_cat, fancy, dpi, no_plot=no_plots)
+    resolved = catalog.plot_resolved_fraction(resolved_sigma, resolved_offset, stacked_cat, fancy, dpi, no_plot=no_plots)
     if not stacked_cat:
         catalog.table['Resolved'] = resolved
         catalog.table.write(catalog_file, overwrite=True)
@@ -364,6 +365,9 @@ def new_argument_parser():
     parser.add_argument('--resolved_sigma', default=1.25, type=float,
                         help="""Selection parameter for resolved sources, higher values more
                                 stringently select resolved sources (default=1.25).""")
+    parser.add_argument('--resolved_offset', default=0.0, type=float,
+                        help="""Offset from 1-to-1 relation of integrated/peak flux
+                                of unresolved sources (default=0.0).""")
     parser.add_argument('--flux_col', default='Total_flux', type=str,
                         help="""Name of integrated flux column to use for analysis
                                 (default = Total_flux).""")
