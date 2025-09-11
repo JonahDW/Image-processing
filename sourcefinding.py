@@ -337,7 +337,7 @@ def plot_sf_results(image_file, imname, regions, max_sep, plot,
     if os.path.exists(rms_image):
         rms = helpers.open_fits_casa(rms_image)
         rms_img = np.squeeze(rms[0].data)
-        img /= rms_img
+        img = img/rms_img
         vmax = 5
 
     wcs = WCS(image[0].header, naxis=2)

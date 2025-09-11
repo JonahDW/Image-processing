@@ -22,15 +22,18 @@ from utils import helpers
 
 class Catalog:
 
-    def __init__(self, catalog_file, flux_col, stacked_cat):
-        self.dirname = os.path.dirname(catalog_file)
+    def __init__(self, catalog_file, flux_col, stacked_cat, outdir=None):
+        if outdir is None:
+            self.dirname = os.path.dirname(catalog_file)
+        else:
+            self.dirname = outdir
         self.cat_name = os.path.basename(catalog_file).rsplit('.',1)[0]
         print(f'Reading in catalog: {self.cat_name}')
 
         self.table = Table.read(catalog_file)
         if not flux_col in self.table.colnames:
             print(f'Invalid flux column name {flux_col}')
-            sys.exit(1)
+            sys.exit()
         self.flux_col = flux_col
 
         # Parse meta
@@ -103,47 +106,33 @@ class Catalog:
         '''
         image = fits.open(rms_image)[0]
 
-        # Determine radial profile
-        filename = os.path.join(self.dirname, self.cat_name+'_rms_radial.json')
-
-        if os.path.exists(filename):
-            with open(filename, 'r') as infile:
-                radialprofile = json.load(infile)
-        else:
-            radialprofile = {}
-            center = (image.header['CRPIX1'],image.header['CRPIX2'])
-            data = np.squeeze(image.data)
-
-            y, x = np.indices((data.shape))
-            r = np.sqrt((x - center[0])**2 + (y - center[1])**2)
-            r = r.astype(int)
-
-            r_values, indices, inverse = np.unique(r.ravel(), return_index=True, return_inverse=True)
-            rms = np.array([np.median(data.ravel()[inverse == r]) for r in r_values])
-
-            radialprofile['dist'] = r_values*max(image.header['CDELT1'],image.header['CDELT2'])
-            radialprofile['rms'] = rms
-
-            with open(filename, 'w') as outfile:
-                json.dump(radialprofile,outfile,
-                          indent=4, sort_keys=True,
-                          separators=(',', ': '),
-                          ensure_ascii=False,
-                          cls=NumpyEncoder)
-
-        radial_profile = interp1d(radialprofile['dist'], radialprofile['rms']/np.nanmin(radialprofile['rms']), fill_value=1)
-
         # Determine coverage
         rms_data = image.data.flatten()
-
         rms_range = np.logspace(np.log10(np.nanmin(rms_data)), np.log10(np.nanmax(rms_data)), 100)
         coverage = [np.sum([rms_data < rms])/np.count_nonzero(~np.isnan(rms_data)) for rms in rms_range]
-        # Put sigma_20 into header
-        self.table.meta['sigma_20'] = rms_range[np.argmin(np.abs(np.array(coverage)-0.2))]
 
         # Define a spline and interpolate the values
-        rms_coverage = interp1d(rms_range, coverage, fill_value='extrapolate')
+        rms_coverage = interp1d(rms_range, coverage, bounds_error=False, fill_value=(0,1))
         self.npix = np.count_nonzero(~np.isnan(rms_data))
+
+        # Put sigma_20 into header
+        sigma20 = rms_range[np.argmin(np.abs(np.array(coverage)-0.2))]
+        self.table.meta['sigma_20'] = sigma20
+
+        # Save to json file
+        rms_stats = {}
+        rms_stats['rms'] = rms_range
+        rms_stats['coverage'] = coverage
+        rms_stats['sigma20'] = sigma20
+
+        filename = os.path.join(self.dirname, self.cat_name+'_rms_coverage.json')
+        print(f"--> Saving json file of rms coverage '{filename}'")
+        with open(filename, 'w') as outfile:
+            json.dump(rms_stats,outfile,
+                      indent=4, sort_keys=True,
+                      separators=(',', ': '),
+                      ensure_ascii=False,
+                      cls=NumpyEncoder)
 
         if not no_plot:
             # Plot rms coverage
@@ -165,9 +154,10 @@ class Catalog:
             plt.savefig(outfile, dpi=300)
             plt.close()
 
-        return radial_profile, rms_coverage
+        return rms_coverage
 
-    def plot_diff_number_counts(self, flux_col, fancy, dpi, rms_coverage=None, completeness=None, no_plot=False):
+    def plot_diff_number_counts(self, fancy, dpi, model_counts=None, rms_coverage=None, 
+                                completeness=None, no_plot=False):
         '''
         Compute and plot differential number counts
         input RMS image is used to account for sky coverage
@@ -178,14 +168,9 @@ class Catalog:
         rms_coverage -- Input rms coverage function
         completeness -- File to correct for completeness
         '''
-        counts = {}
-
-        bin_means = [np.mean(self.table[self.flux_col][np.logical_and(self.table[self.flux_col] > self.edges[i],
-                             self.table[self.flux_col] < self.edges[i+1])]) for i in range(len(self.edges)-1)]
-        counts['solid_angle'] = self.pix_area*self.pix_size**2*(np.pi/180)**2
-        counts['dN'] = self.dN
-        counts['dS'] = np.diff(self.edges)
-        counts['S'] = np.array(bin_means)
+        S = (self.edges[:-1] + self.edges[1:]) / 2
+        dS = np.diff(self.edges)
+        solid_angle = self.pix_area*self.pix_size**2*(np.pi/180)**2
 
         count_correction = 1
         if completeness:
@@ -194,14 +179,29 @@ class Catalog:
                 data = json.load(infile)
             flux_means = np.array([(data['flux_bins'][i]+data['flux_bins'][i+1])/2 for i in range(len(data['flux_bins'])-1)])
 
-            comp_frac = interp1d(flux_means, np.mean(data['detected_fraction'], axis=0), bounds_error=False, fill_value=(0,1))
-            count_correction = comp_frac(counts['S'])
+            comp_frac = interp1d(flux_means, np.mean(data['detected_fraction'], axis=0), 
+                                 bounds_error=False, fill_value=(0,1))
+            count_correction = comp_frac(S)
 
         if rms_coverage:
-            count_correction = rms_coverage(counts['S']/5.0)
-            counts['solid_angle'] = self.npix*self.pix_size**2*(np.pi/180)**2
+            count_correction = rms_coverage(S/5.0)
+            solid_angle = self.npix*self.pix_size**2*(np.pi/180)**2
+
+        diff_counts = S**(5/2) * (self.dN/count_correction) / dS / solid_angle
+        diff_counts_err = S**(5/2) * (np.sqrt(self.dN)/count_correction) / dS / solid_angle
+
+        plt.errorbar(S, diff_counts, yerr=diff_counts_err,
+                     fmt='o', color='k', label='Catalog')
 
         # Save diff number counts to json file
+        counts = {}
+        counts['flux'] = S
+        counts['dflux'] = dS
+        counts['counts'] = self.dN
+        counts['diff_counts'] = diff_counts
+        counts['diff_counts_err'] = diff_counts_err
+        counts['solid_angle'] = solid_angle
+
         filename = os.path.join(self.dirname, self.cat_name+'_diff_counts.json')
         print(f"--> Saving json file of differential number counts '{filename}'")
         with open(filename, 'w') as outfile:
@@ -211,21 +211,16 @@ class Catalog:
                       ensure_ascii=False,
                       cls=NumpyEncoder)
 
-        counts['dN'] = counts['dN']/count_correction
-        plt.errorbar(counts['S'], counts['S']**(5/2)*counts['dN']/counts['dS']/counts['solid_angle'],
-                     yerr=counts['S']**(5/2)*np.sqrt(counts['dN'])/counts['dS']/counts['solid_angle'],
-                     fmt='o', color='k', label='Catalog')
-
-        # Get differential number counts from SKADS and plot
-        path = Path(__file__).parent / 'parsets/SKADS_10muJy_diff_counts.json'
-        with open(path) as f:
-            SKADS = json.load(f)
-
         if not no_plot:
-            SKADS['flux_means'] = np.array([(SKADS['flux_bins'][i]+SKADS['flux_bins'][i+1])/2 for i in range(len(SKADS['flux_bins'])-1)])
-            plt.errorbar(SKADS['flux_means'], SKADS['counts_1285'],
-                        yerr=SKADS['counts_1285_err'],
-                        fmt=':.', color='r', lw=0.5, label='SKADS @ 1285 MHz')
+            if model_counts is not None:
+                # Get differential number counts from SKADS and plot
+                path = Path(__file__).parent / 'data' / (model_counts+'.json')
+                with open(path) as f:
+                    model_counts = json.load(f)
+
+            plt.errorbar(model_counts['flux'], model_counts['counts'],
+                        yerr=model_counts['counts_err'],
+                        fmt=':.', color='r', lw=0.5, label=model_counts['desc'])
 
             plt.xscale('log')
             plt.yscale('log')
@@ -298,7 +293,7 @@ class Catalog:
             plt.xlabel('S/N')
 
             leg = plt.legend()
-            for lh in leg.legendHandles: 
+            for lh in leg.legend_handles: 
                 lh.set_alpha(1)
 
             outfile = os.path.join(self.dirname,self.cat_name+'_resolved.png')
@@ -313,15 +308,18 @@ def main():
     parser = new_argument_parser()
     args = parser.parse_args()
 
+    # Input options
     catalog_file = args.catalog
     rms_image = args.rms_image
     comp_corr = args.comp_corr
+    model_counts = args.model_counts
 
     flux_col = args.flux_col
     resolved_sigma = args.resolved_sigma
     resolved_offset = args.resolved_offset
     stacked_cat = args.stacked_catalog
 
+    outdir = args.outdir
     no_plots = args.no_plots
     fancy = args.fancy
     dpi = args.dpi
@@ -331,16 +329,16 @@ def main():
         plt.rc('text', usetex=True)
         plt.rcParams.update({'font.size': 14})
 
-    catalog = Catalog(catalog_file, flux_col, stacked_cat)
+    catalog = Catalog(catalog_file, flux_col, stacked_cat, outdir)
     catalog.get_flux_bins(nbins=50)
 
     catalog.plot_number_counts(fancy, dpi, no_plot=no_plots)
 
     if rms_image:
-        radial_profile, rms_coverage = catalog.rms_statistics(rms_image, fancy, no_plot=no_plots)
-        catalog.plot_diff_number_counts(flux_col, fancy, dpi, rms_coverage=rms_coverage, no_plot=no_plots)
+        rms_coverage = catalog.rms_statistics(rms_image, fancy, no_plot=no_plots)
+        catalog.plot_diff_number_counts(fancy, dpi, model_counts, rms_coverage=rms_coverage, no_plot=no_plots)
     if comp_corr:
-        catalog.plot_diff_number_counts(flux_col, fancy, dpi, completeness=comp_corr, no_plot=no_plots)
+        catalog.plot_diff_number_counts(fancy, dpi, model_counts, completeness=comp_corr, no_plot=no_plots)
 
     resolved = catalog.plot_resolved_fraction(resolved_sigma, resolved_offset, stacked_cat, fancy, dpi, no_plot=no_plots)
     if not stacked_cat:
@@ -368,12 +366,18 @@ def new_argument_parser():
     parser.add_argument('--resolved_offset', default=0.0, type=float,
                         help="""Offset from 1-to-1 relation of integrated/peak flux
                                 of unresolved sources (default=0.0).""")
+    parser.add_argument('--model_counts', default='SKADS_1285MHz_counts', type=str,
+                        help="""Input file for model differential source counts to compare
+                                to observed counts. Must be present as a json file in the
+                                'data' directory (default='SKADS_1285MHz_counts').""")
     parser.add_argument('--flux_col', default='Total_flux', type=str,
                         help="""Name of integrated flux column to use for analysis
                                 (default = Total_flux).""")
     parser.add_argument('--stacked_catalog', action='store_true',
                         help="""Indicate if catalog is built up from multiple catalogs,
                                 for example with combine_catalogs script.""")
+    parser.add_argument('--outdir', default=None, type=str,
+                        help="Output directory. Default is same directory as input catalog.")
     parser.add_argument('--no_plots', action='store_true',
                         help="""Run the scripts without making any plots.""")
     parser.add_argument('--fancy', action='store_true',
