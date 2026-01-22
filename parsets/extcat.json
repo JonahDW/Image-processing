@@ -1,28 +1,28 @@
 {
-    "data_columns" : {
-        "ra" : "RA",
-        "dec" : "DEC",
-        "majax" : "Maj",
-        "minax" : "Min",
-        "pa" : "PA",
-        "peak_flux" : "Peak_flux",
-        "total_flux" : "Total_flux",
+    "columns" : {
+        "ra" : "lon",
+        "dec" : "lat",
+        "majax" : "a",
+        "minax" : "b",
+        "pa" : "pa",
+        "peak_flux" : "peak_flux",
+        "total_flux" : "int_flux",
         "quality_flag" : null
     },
-	"units" : {
-		"ra" : "deg",
-		"dec" : "deg",
-		"majax" : "arcsec",
-		"minax" : "arcsec",
-		"pa" : "deg",
-		"peak_flux" : "mJy/beam",
-		"total_flux" : "mJy"
- 	},
+    "units" : {
+        "ra" : "deg",
+        "dec" : "deg",
+        "majax" : "arcsec",
+        "minax" : "arcsec",
+        "pa" : "deg",
+        "peak_flux" : "mJy/beam",
+        "total_flux" : "mJy"
+    },
     "properties" : {
         "_comment" : "BMAJ and BMIN in arcsec, BPA in degrees, freq in MHz",
-        "BMAJ" : 45.0,
-        "BMIN" : 45.0,
-        "BPA" : 90.0,
-        "freq" : 1400.0
+        "BMAJ" : 8.0,
+        "BMIN" : 8.0,
+        "BPA" : 0.0,
+        "freq" : 1300.0
     }
 }

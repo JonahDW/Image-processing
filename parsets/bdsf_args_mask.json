@@ -24,7 +24,7 @@
         "island_mask" : false
     },
     "write_catalog" : {
-	"catalog_type" : "gaul",
-	"clobber" : true
+        "catalog_type" : "gaul",
+        "clobber" : true
     }
 }

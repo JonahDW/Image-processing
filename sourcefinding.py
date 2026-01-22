@@ -66,6 +66,9 @@ def run_bdsf(image, output_dir, argfile, output_format, reuse_rmsmean=False):
     else:
         img = bdsf.process_image(image, **args_dict['process_image'])
 
+    # Uncomment to check what is happening (and comment matplotlib Agg)
+    #img.show_fit(ch0_flagged=True)
+
     for img_type in args_dict['export_image']:
         if args_dict['export_image'][img_type]:
             img.export_image(outfile=impath+'_'+img_type+'.fits', 

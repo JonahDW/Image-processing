@@ -214,7 +214,8 @@ class ExternalCatalog:
         # Create catalog for creating source ellipses
         self.reduced_cat = Table()
         for column in column_dict:
-            self.reduced_cat[column] = self.cat[column_dict[column]]
+            if column_dict[column]:
+                self.reduced_cat[column] = self.cat[column_dict[column]]
             if column in unit_dict:
                 self.reduced_cat[column].unit = u.Unit(unit_dict[column])
 
@@ -278,7 +279,7 @@ class BDSFCatalog:
                 freq_idx = i
                 break
         self.freq = float(self.header['CRVAL'+str(freq_idx)])/1e6 #MHz
-        self.dfreq = float(self.header['CDELT'+str(freq_idx)])/1e6 #MHz
+        #self.dfreq = float(self.header['CDELT'+str(freq_idx)])/1e6 #MHz
 
         # Determine center and fov, either from input or header
         if ra_center is None:
@@ -295,7 +296,7 @@ class BDSFCatalog:
             self.fov = fov*u.degree
 
         try:
-            self.name = self.header['OBJECT'].replace("'","")
+            self.name = self.header['OBJECT'].replace("'","").strip()
         except KeyError:
             self.name = os.path.basename(filename).rsplit('.',1)[0]
 
@@ -358,7 +359,7 @@ class BDSFCatalog:
                 ext_table = sc.getvodata(ext_cat_name, 
                                          central_coord = self.center,
                                          offset = 0.5*self.fov)
-            except SomeError:
+            except:
                 print(f"Nothing found at {ext_cat_name}, make sure you have entered the correct name.")
                 sys.exit()
 
@@ -557,71 +558,6 @@ def info_match(internal, external, matches, extbig, fluxtype, alpha):
 
     return match_info
 
-def plot_catalog_match(internal, external, matches, extbig, plot, dpi):
-    """
-    Plot the field with all the matches in it as ellipses
-
-    Keyword arguments:
-    internal (class object) -- Internal catalogue
-    external (class object) -- External catalogue
-    matches (list of lists) -- Matched sources between catalogues
-    extbig (bool) -- If True, the external catalogue is 
-                     considered to have the biggger beam
-    plot (bool or string) -- If string, plot will be written here
-    dpi (int) -- DPI of plot
-    """
-
-    # Determine which catalog has the bigger beam
-    if extbig:
-        big_sources = external.sources
-        small_sources = internal.sources
-    else:
-        big_sources = internal.sources
-        small_sources = external.sources
-
-    fig = plt.figure(figsize=(20,20))
-    ax = plt.subplot()
-
-    # For each big source plot and plot all matches
-    for i, match in enumerate(matches):
-        big_ell = big_sources[i].to_artist()
-        ax.add_artist(big_ell)
-        big_ell.set_facecolor('b')
-        big_ell.set_alpha(0.5)
-
-        if len(match) > 0:
-            for ind in match:
-                small_ell = small_sources[ind].to_artist()
-                ax.add_artist(small_ell)
-                small_ell.set_facecolor('r')
-                small_ell.set_alpha(0.5)
-        else:
-            big_ell.set_facecolor('k')
-
-    non_matches = np.setdiff1d(np.arange(len(small_sources)), np.concatenate(matches).ravel())
-    for i in non_matches:
-        small_ell = small_sources[i].to_artist()
-        ax.add_artist(small_ell)
-        small_ell.set_facecolor('g')
-        small_ell.set_alpha(0.5)
-
-    ax.set_xlim(internal.center.ra.deg-0.5*internal.fov.value,
-                internal.center.ra.deg+0.5*internal.fov.value)
-    ax.set_ylim(internal.center.dec.deg-0.5*internal.fov.value*np.cos(internal.center.dec.rad),
-                internal.center.dec.deg+0.5*internal.fov.value*np.cos(internal.center.dec.rad))
-    ax.set_xlabel('RA (degrees)')
-    ax.set_ylabel('DEC (degrees)')
-
-    if plot is True:
-        outfile = os.path.join(internal.dirname,f'match_{external.name}_{internal.name}_shapes.png')
-    else:
-        outfile = plot
-
-    print(f"--> Saving plot of source ellipses '{outfile}'")
-    plt.savefig(outfile, dpi=dpi, bbox_inches='tight')
-
-    plt.close()
-
 def plot_astrometrics(match_info, internal, external, astro, dpi):
     """
     Plot astrometric offsets of sources to the reference catalog
@@ -776,7 +712,7 @@ def plot_fluxes(match_info, internal, external, fluxtype, flux, dpi):
     plt.savefig(outfile, dpi=dpi)
     plt.close()
 
-def write_to_catalog(internal, external, matches, extbig, match_info, fluxtype, output):
+def write_to_catalog(internal, external, matches, extbig, match_info, fluxtype, outcat, jointype):
     """
     Write the matched catalogs to a fits file
 
@@ -812,10 +748,10 @@ def write_to_catalog(internal, external, matches, extbig, match_info, fluxtype, 
 
     if big.name == small.name:
         small.name += '_1'
-    out = join(big.cat, small.cat, keys='idx', 
+    out = join(big.cat, small.cat, keys='idx', join_type=jointype,
                table_names=[big.name,small.name])
 
-    if output is True:
+    if outcat is True:
         outfile = os.path.join(internal.dirname, f'match_{external.name}_{internal.name}.fits')
     else:
         outfile = output
@@ -823,7 +759,7 @@ def write_to_catalog(internal, external, matches, extbig, match_info, fluxtype, 
     print(f"--> Saving output FITS catalog '{outfile}'")
     out.write(outfile, overwrite=True, format='fits')
 
-def write_info(internal, external, match_info, output):
+def write_info(internal, external, match_info):
     """
     Write the information into a json file
 
@@ -860,10 +796,10 @@ def main():
     source_overlap = args.source_overlap_percent
 
     # Output options
-    output = args.output
+    outcat = args.outcat
+    jointype = args.outcat_jointype
     astro = args.astro
     flux = args.flux
-    plot = args.plot
     dpi = args.dpi
     annotate = args.annotate
     annotate_nonmatched = args.annotate_nonmatched
@@ -875,12 +811,16 @@ def main():
     fov = args.fov
 
     input_cat = Table.read(input_cat_file)
-    int_catalog = BDSFCatalog(input_cat, input_cat_file, survey_name, ra_center, dec_center, fov)
+    int_catalog = BDSFCatalog(input_cat, input_cat_file, 
+                              survey_name, ra_center, dec_center, fov)
 
     if os.path.exists(ext_cat):
         ext_table = Table.read(ext_cat)
         if 'bdsfcat' in ext_cat:
-            ext_catalog = BDSFCatalog(ext_table, ext_cat, ra_center=ra_center, dec_center=dec_center, fov=fov)
+            ext_catalog = BDSFCatalog(ext_table, ext_cat, 
+                                      ra_center=ra_center, 
+                                      dec_center=dec_center, 
+                                      fov=fov)
         else:
             ext_catalog = ExternalCatalog(ext_cat, ext_table, int_catalog.center)
     else:
@@ -896,8 +836,12 @@ def main():
     if int_catalog.BMaj > ext_catalog.BMaj:
         extbig = False
 
-    matches = match_catalogs(int_catalog, ext_catalog, extbig, sigma_extent, search_dist, source_overlap)
-    matches_info = info_match(int_catalog, ext_catalog, matches, extbig, fluxtype, alpha)
+    matches = match_catalogs(int_catalog, ext_catalog,
+                             extbig, sigma_extent,
+                             search_dist, source_overlap)
+    matches_info = info_match(int_catalog, ext_catalog,
+                              matches, extbig,
+                              fluxtype, alpha)
 
     matches_info['INPUT'] = {}
     matches_info['INPUT']['alpha'] = alpha 
@@ -905,20 +849,26 @@ def main():
     matches_info['INPUT']['search_dist'] = search_dist
     matches_info['INPUT']['source_overlap_percent'] = source_overlap
 
-    if plot:
-        plot_catalog_match(int_catalog, ext_catalog, matches, extbig, plot, dpi)
     if astro:
-        plot_astrometrics(matches_info, int_catalog, ext_catalog, astro, dpi)
+        plot_astrometrics(matches_info, int_catalog, 
+                          ext_catalog, astro, dpi)
     if flux:
-        plot_fluxes(matches_info, int_catalog, ext_catalog, fluxtype, flux, dpi)
-    if output:
-        write_to_catalog(int_catalog, ext_catalog, matches, extbig, matches_info, fluxtype, output)
-        write_info(int_catalog, ext_catalog, matches_info, output)
+        plot_fluxes(matches_info, int_catalog, 
+                    ext_catalog, fluxtype, flux, dpi)
+    if outcat:
+        write_to_catalog(int_catalog, ext_catalog, 
+                         matches, extbig, matches_info, 
+                         fluxtype, outcat, jointype)
+        write_info(int_catalog, ext_catalog, matches_info)
 
     if annotate == 'kvis':
-        kvis.matches_to_kvis(int_catalog, ext_catalog, matches, extbig, annotate, annotate_nonmatched, sigma_extent)
+        kvis.matches_to_kvis(int_catalog, ext_catalog, 
+                             matches, extbig, annotate, 
+                             annotate_nonmatched, sigma_extent)
     if annotate == 'ds9':
-        kvis.matches_to_ds9(int_catalog, ext_catalog, matches, extbig, annotate, annotate_nonmatched, sigma_extent)
+        kvis.matches_to_ds9(int_catalog, ext_catalog, 
+                            matches, extbig, annotate, 
+                            annotate_nonmatched, sigma_extent)
 
 def new_argument_parser():
 
@@ -954,10 +904,14 @@ def new_argument_parser():
                         help="""Plot the flux ratios of the matches,
                                 optionally provide an output filename
                                 (default = don't plot flux ratio).""")
-    parser.add_argument("--plot", nargs="?", const=True,
-                        help="""Plot the field with the matched ellipses,
+    parser.add_argument("--outcat", nargs="?", const=True,
+                        help="""Output the result of the matching into a catalog,
                                 optionally provide an output filename
-                                (default = don't plot the matched ellipses).""")
+                                (default = don't output a catalog).""")
+    parser.add_argument("--outcat_jointype", default='inner', type=str,
+                        help="""Join type of output catalog. Default is 'inner'
+                                keeping only matched sources. Other options are
+                                'outer', 'left', 'right'.""")
     parser.add_argument("--survey_name", default=None, type=str,
                         help="""Survey name of input catalog to use in matched catalog 
                                 columns and plots""")
@@ -968,10 +922,6 @@ def new_argument_parser():
                         help="""The spectral slope to assume for calculating the
                                 flux ratio, where Flux_1 = Flux_2 * (freq_1/freq_2)^alpha
                                 (default = -0.8)""")
-    parser.add_argument("--output", nargs="?", const=True,
-                        help="""Output the result of the matching into a catalog,
-                                optionally provide an output filename
-                                (default = don't output a catalog).""")
     parser.add_argument("--annotate", nargs="?",
                         help="""Output the result of the matching into an
                                 annotation file, either kvis or ds9

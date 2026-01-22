@@ -91,14 +91,14 @@ def get_properties(identity, ra_center, dec_center):
     ra_center (float) -- Right ascension to get the beam at
     dec_center (float) -- Declination to get the beam at
     '''
-    path = Path(__file__).parent / 'parsets/surveys.json'
+    path = Path(__file__).parents[1] / 'parsets/surveys.json'
     with open(path) as f:
         open_dict = json.load(f)
 
     if identity in open_dict.keys():
         cat_dict = open_dict[identity]
     else:
-        path = Path(__file__).parent / 'parsets/extcat.json'
+        path = Path(__file__).parents[1] / 'parsets/extcat.json'
         with open(path) as f:
             cat_dict = json.load(f)
 
@@ -123,6 +123,7 @@ def get_properties(identity, ra_center, dec_center):
     beam = [BMaj,BMin,BPA]
     columns = cat_dict['columns']
     units = cat_dict['units']
+
     return beam, freq, columns, units
 
 def measure_image_regions(pixel_regions, image, weight_image=None, weight_regions=None):

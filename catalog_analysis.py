@@ -113,7 +113,7 @@ class Catalog:
 
         # Define a spline and interpolate the values
         rms_coverage = interp1d(rms_range, coverage, bounds_error=False, fill_value=(0,1))
-        self.npix = np.count_nonzero(~np.isnan(rms_data))
+        self.pix_area = np.count_nonzero(~np.isnan(rms_data))
 
         # Put sigma_20 into header
         sigma20 = rms_range[np.argmin(np.abs(np.array(coverage)-0.2))]
@@ -185,7 +185,6 @@ class Catalog:
 
         if rms_coverage:
             count_correction = rms_coverage(S/5.0)
-            solid_angle = self.npix*self.pix_size**2*(np.pi/180)**2
 
         diff_counts = S**(5/2) * (self.dN/count_correction) / dS / solid_angle
         diff_counts_err = S**(5/2) * (np.sqrt(self.dN)/count_correction) / dS / solid_angle
