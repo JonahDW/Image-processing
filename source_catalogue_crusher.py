@@ -92,7 +92,7 @@ def main():
     catalog = Table.read(fits_tab)
 
     # column information
-    cols  = catalog.columns
+    cols  = catalog.itercols()
 
     # print cataloge colomn
     #
