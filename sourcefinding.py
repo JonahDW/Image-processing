@@ -71,6 +71,7 @@ def run_bdsf(image, output_dir, argfile, output_format, reuse_rmsmean=False):
 
     for img_type in args_dict['export_image']:
         if args_dict['export_image'][img_type]:
+            print(impath+'_'+img_type+'.fits')
             img.export_image(outfile=impath+'_'+img_type+'.fits', 
                              clobber=True, img_type=img_type)
 
@@ -313,7 +314,7 @@ def write_crtf_mask(imname, regions, size=1.0):
 
     outfile = imname+'_mask.crtf'
     print(f'Wrote mask file to {outfile}')
-    regions.write(outfile, format='crtf')
+    regions.write(outfile, format='crtf', overwrite=True)
 
 def plot_sf_results(image_file, imname, regions, max_sep, plot, 
                      rms_image=None, flag_regions=None):
@@ -421,12 +422,16 @@ def main():
         os.mkdir(output_dir)
     imname = os.path.join(output_dir, os.path.basename(inpimage).rsplit('.',1)[0])
 
-    # Standard output is source list, Gaussian list for masking
-    if output_format is None:
-        if mask:
-            output_format = ['fits:gaus']
-        else:
-            output_format = ['fits:srl']
+    # Standard output is source list, need Gaussian list for masking
+    if mask:
+        if output_format is None:
+            output_format = ['fits:gaul']
+        if 'fits:gaul' not in output_format:
+            output_format.append('fits:gaul')
+    elif output_format is None:
+        output_format = ['fits:srl']
+
+    print(output_format)
 
     if redo_catalog:
         print(f'Using previously generated catalog and skipping sourcefinding')
