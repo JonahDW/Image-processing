@@ -71,7 +71,6 @@ def run_bdsf(image, output_dir, argfile, output_format, reuse_rmsmean=False):
 
     for img_type in args_dict['export_image']:
         if args_dict['export_image'][img_type]:
-            print(impath+'_'+img_type+'.fits')
             img.export_image(outfile=impath+'_'+img_type+'.fits', 
                              clobber=True, img_type=img_type)
 
@@ -430,8 +429,6 @@ def main():
             output_format.append('fits:gaul')
     elif output_format is None:
         output_format = ['fits:srl']
-
-    print(output_format)
 
     if redo_catalog:
         print(f'Using previously generated catalog and skipping sourcefinding')
