@@ -424,7 +424,7 @@ def main():
     # Standard output is source list, Gaussian list for masking
     if output_format is None:
         if mask:
-            output_format = ['fits:gaus']
+            output_format = ['fits:gaul']
         else:
             output_format = ['fits:srl']
 
